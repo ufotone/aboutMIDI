@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KORG R3 Web MIDI Editor / Dumper</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 13px/1.4 system-ui, sans-serif; background:#1b1b1f; color:#e8e8ea; margin:0; padding:16px; }
+  h1 { font-size:16px; margin:0 0 12px; }
+  h2 { font-size:13px; margin:16px 0 6px; color:#9bd; border-bottom:1px solid #333; padding-bottom:2px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  button { background:#2d2d33; color:#e8e8ea; border:1px solid #444; padding:5px 10px; border-radius:4px; cursor:pointer; }
+  button:hover:not(:disabled) { background:#3a3a42; }
+  button:disabled { opacity:0.4; cursor:not-allowed; }
+  select, input { background:#222; color:#e8e8ea; border:1px solid #444; border-radius:4px; padding:4px 6px; }
+  input[type=number] { width:60px; }
+  #log { background:#111; border:1px solid #333; height:200px; overflow:auto; padding:6px; font: 11px/1.3 ui-monospace, Consolas, monospace; white-space:pre-wrap; }
+  #progs { display:grid; grid-template-columns:repeat(16, 1fr); gap:2px; margin-top:4px; }
+  .prog { background:#222; border:1px solid #333; padding:2px 3px; border-radius:2px; font-size:9px; line-height:1.15; cursor:pointer; min-height:22px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .prog:hover { background:#2d2d33; }
+  .prog.empty { color:#555; cursor:default; }
+  .prog.cur { border-color:#6af; background:#1f3050; }
+  .pill { display:inline-block; padding:2px 6px; border-radius:9px; font-size:11px; background:#333; }
+  .ok { background:#264e2a; } .ng { background:#5a2222; }
+  details { background:#222; border:1px solid #333; border-radius:4px; padding:6px 10px; margin:4px 0; }
+  summary { cursor:pointer; user-select:none; }
+  /* Editor */
+  .tabs { display:flex; gap:4px; margin:6px 0; }
+  .tab { padding:4px 10px; background:#222; border:1px solid #333; cursor:pointer; border-radius:4px 4px 0 0; }
+  .tab.active { background:#1f3050; border-color:#6af; }
+  .grp { display:inline-block; vertical-align:top; background:#202024; border:1px solid #333; border-radius:5px; padding:4px 5px; margin:2px; }
+  .grp h3 { margin:0 0 3px; font-size:9px; color:#9bd; letter-spacing:0.5px; text-transform:uppercase; }
+  .knobs { display:flex; flex-wrap:wrap; gap:2px; }
+  .knob { width:38px; text-align:center; font-size:9px; user-select:none; }
+  .knob svg { display:block; margin:0 auto; cursor:ns-resize; touch-action:none; }
+  .knob .lbl { color:#aaa; height:20px; line-height:10px; font-size:8px; overflow:hidden; }
+  .knob .val { color:#fff; font: 9px ui-monospace,monospace; height:11px; }
+  .knob select { width:38px; font-size:8px; padding:1px; height:18px; }
+</style>
+</head>
+<body>
+<h1>KORG R3 Web MIDI Editor / Dumper <span class="pill" id="midiState">未接続</span> <button id="midiToggle" style="margin-left:8px">MIDI: ON</button></h1>
+
+<div class="row">
+  <label>Input: <select id="inSel"></select></label>
+  <label>Output: <select id="outSel"></select></label>
+  <label>Global Ch: <input id="ch" type="number" min="1" max="16" value="1"></label>
+  <button id="reqInquiry">Identity Request</button>
+  <span id="devInfo"></span>
+</div>
+
+<h2>Current Program (Edit Buffer)</h2>
+<div class="row">
+  <button id="reqCurrent">Request Current Program</button>
+  <button id="sendCurrent" disabled>Send to Edit Buffer</button>
+  <button id="saveCurrent" disabled>Save .syx</button>
+  <span id="curName"></span>
+</div>
+
+<h2>All Programs (128) — Dumper</h2>
+<div class="row">
+  <button id="reqAll">Request All (0–127)</button>
+  <button id="stopAll" disabled>Stop</button>
+  <button id="saveAll" disabled>Save All .syx</button>
+  <label>Delay(ms): <input id="dlay" type="number" value="120" min="20" max="2000"></label>
+  <span id="allProg"></span>
+</div>
+<div id="progs"></div>
+
+<h2>Global Data</h2>
+<div class="row">
+  <button id="reqGlobal">Request Global</button>
+  <button id="sendGlobal" disabled>Send Global</button>
+  <button id="saveGlobal" disabled>Save Global .syx</button>
+</div>
+
+<h2>Load .syx</h2>
+<div class="row">
+  <input type="file" id="file" accept=".syx,application/octet-stream" multiple>
+  <button id="sendLoaded" disabled>Send loaded SysEx</button>
+  <span id="loadedInfo"></span>
+</div>
+
+<h2>Editor</h2>
+<div class="tabs" id="edTabs">
+  <div class="tab active" data-tab="t1">Timbre 1</div>
+  <div class="tab" data-tab="t2">Timbre 2</div>
+</div>
+<div class="row">
+  <button id="pullCur">Pull from Current Dump</button>
+  <label>Byte順:
+    <select id="byteOrder">
+      <option value="lsb" selected>LSB→MSB (table準拠)</option>
+      <option value="msb">MSB→LSB (NOTE6準拠)</option>
+    </select>
+  </label>
+</div>
+<div id="editor"></div>
+
+<h2>Parameter Change (manual)</h2>
+<div class="row">
+  <label>ID: <input id="pid" type="text" value="00" size="3"></label>
+  <label>SubID: <input id="psid" type="text" value="00" size="3"></label>
+  <label>Value: <input id="pval" type="number" value="0"></label>
+  <button id="sendParam">Send 41h</button>
+  <span style="color:#888">※ ID/SubIDは16進、Valueは符号付き10進（14bit）</span>
+</div>
+
+<h2>Log</h2>
+<div class="row">
+  <button id="clearLog">Clear</button>
+  <label><input type="checkbox" id="logSysex" checked> SysEx hex</label>
+  <label><input type="checkbox" id="logParam" checked> Param送受信</label>
+  <label><input type="checkbox" id="logAllMidi"> 全MIDI入力をログ</label>
+  <label><input type="checkbox" id="logNotes"> Note On/Off も含む</label>
+</div>
+<div id="log"></div>
+
+<script>
+'use strict';
+
+const KORG = 0x42, R3_ID = 0x7D;
+const FUNC = {
+  CUR_DUMP:0x40, PROG_DUMP:0x4C, GLOBAL_DUMP:0x51, PARAM:0x41,
+  REQ_CUR:0x10, REQ_PROG:0x1C, REQ_GLOBAL:0x0E,
+  ACK:0x23, NAK:0x24, FERR:0x26, WROK:0x21, WRNG:0x22,
+};
+
+let midi=null, input=null, output=null;
+let midiEnabled = true;
+let currentDump=null;      // Uint8Array of full SysEx (F0..F7)
+let globalDump=null;
+let programs = new Array(128).fill(null); // each: Uint8Array SysEx
+let loadedSyx = [];        // {name, msgs:[Uint8Array...]}
+let allReq = { active:false, idx:0, total:0, timer:0, resolve:null };
+
+const $ = id => document.getElementById(id);
+function log(msg, cls){
+  const el=$('log'); const line=document.createElement('div');
+  if(cls) line.className=cls;
+  const t = new Date().toTimeString().slice(0,8);
+  line.textContent = `[${t}] ${msg}`;
+  el.appendChild(line); el.scrollTop = el.scrollHeight;
+}
+function hex(b){ return b.toString(16).toUpperCase().padStart(2,'0'); }
+function hexs(arr){ return Array.from(arr).map(hex).join(' '); }
+
+// ===== Korg 7→8 / 8→7 bit conversion (NOTE 5) =====
+// 7 source bytes pack into 8 MIDI bytes: first MIDI byte holds MSBs of next 7.
+function pack8to7(src){
+  const out = [];
+  for(let i=0; i<src.length; i+=7){
+    const blk = src.slice(i, i+7);
+    let msb = 0;
+    for(let j=0; j<blk.length; j++) if(blk[j] & 0x80) msb |= (1<<j);
+    out.push(msb);
+    for(let j=0; j<blk.length; j++) out.push(blk[j] & 0x7F);
+  }
+  return new Uint8Array(out);
+}
+function unpack7to8(src){
+  const out = [];
+  for(let i=0; i<src.length; i+=8){
+    const blk = src.slice(i, i+8);
+    const msb = blk[0];
+    for(let j=1; j<blk.length; j++){
+      const v = blk[j] | ((msb>>(j-1))&1 ? 0x80 : 0);
+      out.push(v);
+    }
+  }
+  return new Uint8Array(out);
+}
+
+// ===== MIDI setup =====
+async function initMIDI(){
+  try{
+    midi = await navigator.requestMIDIAccess({sysex:true});
+    refreshPorts();
+    midi.onstatechange = refreshPorts;
+    $('midiState').textContent = 'MIDI Ready';
+    $('midiState').className = 'pill ok';
+  }catch(e){
+    $('midiState').textContent = 'MIDI不可';
+    $('midiState').className = 'pill ng';
+    log('Web MIDI 取得失敗: '+e.message);
+  }
+}
+function refreshPorts(){
+  const ins=$('inSel'), outs=$('outSel');
+  const prevIn = input?.id, prevOut = output?.id;
+  ins.innerHTML=''; outs.innerHTML='';
+  for(const p of midi.inputs.values()){
+    const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; ins.appendChild(o);
+  }
+  for(const p of midi.outputs.values()){
+    const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; outs.appendChild(o);
+  }
+  if(prevIn && [...midi.inputs.values()].find(p=>p.id===prevIn)) ins.value=prevIn;
+  if(prevOut && [...midi.outputs.values()].find(p=>p.id===prevOut)) outs.value=prevOut;
+  selectPorts();
+}
+function selectPorts(){
+  if(input) input.onmidimessage=null;
+  input = midi.inputs.get($('inSel').value) || null;
+  output = midi.outputs.get($('outSel').value) || null;
+  if(input) input.onmidimessage = onMidi;
+}
+
+// ===== send / receive =====
+function header(){ const ch = (parseInt($('ch').value,10)-1) & 0x0F; return [0xF0, KORG, 0x30|ch, R3_ID]; }
+function sendSysex(bytes){
+  if(!midiEnabled){ return; }
+  if(!output){ log('Output未選択'); return; }
+  output.send(bytes);
+  if($('logSysex').checked) log('TX '+hexs(bytes.slice(0,16))+(bytes.length>16?` … (${bytes.length}B)`:''));
+}
+function sendFunc(func, payload=[]){
+  sendSysex([...header(), func, ...payload, 0xF7]);
+}
+
+// NRPN state tracking (per channel)
+const nrpnState = Array.from({length:16}, ()=>({msb:127,lsb:127,dataMsb:0}));
+function onMidi(e){
+  if(!midiEnabled) return;
+  const d = e.data;
+  // === 全MIDI入力ロガー ===
+  if(d[0]!==0xF0 && d[0]!==0xF7){
+    // System Realtime (F8 Clock, FA Start, FB Continue, FC Stop, FE ActiveSense, FF Reset) はスキップ
+    if(d[0]>=0xF8) return;
+    const status = d[0]&0xF0, ch=(d[0]&0x0F)+1;
+    const showAll = $('logAllMidi').checked;
+    if(status===0xB0){
+      const cc=d[1], v=d[2];
+      const st = nrpnState[ch-1];
+      if(cc===99){ st.msb=v; }
+      else if(cc===98){ st.lsb=v; }
+      else if(cc===6){ st.dataMsb=v; log(`RX NRPN ch${ch} MSB=${hex(st.msb)} LSB=${hex(st.lsb)} val=${v}`); }
+      else if(cc===38){ log(`RX NRPN ch${ch} MSB=${hex(st.msb)} LSB=${hex(st.lsb)} valLSB=${v}`); }
+      else if(showAll){ log(`RX CC ch${ch} cc=${cc} val=${v}`); }
+    } else if(status===0x90 || status===0x80){
+      if($('logNotes').checked) log(`RX ${status===0x90?'NoteOn':'NoteOff'} ch${ch} key=${d[1]} vel=${d[2]}`);
+    } else if(status===0xE0){
+      if(showAll) log(`RX PitchBend ch${ch} val=${(d[2]<<7)|d[1]}`);
+    } else if(status===0xC0){
+      if(showAll) log(`RX ProgChg ch${ch} prog=${d[1]}`);
+    } else if(status===0xD0){
+      if(showAll) log(`RX ChPressure ch${ch} val=${d[1]}`);
+    } else if(showAll){
+      log(`RX ${hexs(d)}`);
+    }
+    return;
+  }
+  if(d[0]!==0xF0) return;
+  // accept F0 42 3? 7D ...
+  if(d[1]!==KORG) {
+    if(d[1]===0x7E && d[3]===0x06 && d[4]===0x02){ onIdentity(d); return; }
+    return;
+  }
+  if((d[2]&0xF0)!==0x30 || d[3]!==R3_ID) return;
+  const func = d[4];
+  if($('logSysex').checked) log(`RX func=${hex(func)} len=${d.length}`);
+  switch(func){
+    case FUNC.CUR_DUMP: onCurrentDump(d); break;
+    case FUNC.PROG_DUMP: onProgDump(d); break;
+    case FUNC.GLOBAL_DUMP: onGlobalDump(d); break;
+    case FUNC.ACK: log('ACK'); break;
+    case FUNC.NAK: log('NAK (load error)'); break;
+    case FUNC.FERR: log('Data Format Error'); break;
+    case FUNC.WROK: log('Write Completed'); break;
+    case FUNC.WRNG: log('Write Error'); break;
+    case FUNC.PARAM:
+      if(d.length>=12) log(`Param Change ID=${hex(d[6])}${hex(d[5])} Sub=${hex(d[8])}${hex(d[7])} Val=${decode14(d[10],d[9])}`);
+      break;
+    default: log('Unknown func '+hex(func));
+  }
+}
+function decode14(msb,lsb){
+  let v = ((msb&0x7F)<<7) | (lsb&0x7F);
+  if(v & 0x2000) v |= ~0x3FFF;
+  return v;
+}
+
+function onIdentity(d){
+  $('devInfo').textContent = ` Family=${hex(d[7])}${hex(d[6])} Ver=${hex(d[12])}.${hex(d[11])}`;
+  log('Identity Reply: '+hexs(d));
+}
+
+function getProgramName(sysex){
+  // sysex = F0,42,3g,7D,40,<packed data>,F7  (current)
+  // or    F0,42,3g,7D,4C,pp,PP,<packed data>,F7  (1 prog)
+  let dataStart;
+  if(sysex[4]===FUNC.CUR_DUMP) dataStart=5;
+  else if(sysex[4]===FUNC.PROG_DUMP) dataStart=7;
+  else return '';
+  const packed = sysex.slice(dataStart, sysex.length-1);
+  const unp = unpack7to8(packed);
+  let name=''; for(let i=0;i<8;i++){ const c=unp[i]; if(c>=0x20 && c<0x7F) name+=String.fromCharCode(c); }
+  return name.trim();
+}
+
+function onCurrentDump(d){
+  currentDump = new Uint8Array(d);
+  const n = getProgramName(currentDump);
+  $('curName').textContent = ' Name: "'+n+'"';
+  $('sendCurrent').disabled=false; $('saveCurrent').disabled=false;
+  log(`Current Program received (${d.length}B) name="${n}"`);
+  // 自動で現在表示中のTimbre側UIに反映
+  pullToEditor();
+}
+function onProgDump(d){
+  const no = (d[5]&0x7F) | ((d[6]&0x7F)<<7);
+  if(no<128){
+    programs[no] = new Uint8Array(d);
+    renderProgGrid();
+    $('saveAll').disabled=false;
+  }
+  log(`Prog ${no} "${getProgramName(d)}" (${d.length}B)`);
+  if(allReq.active && allReq.idx===no){
+    clearTimeout(allReq.timer);
+    nextAllReq();
+  }
+}
+function onGlobalDump(d){
+  globalDump = new Uint8Array(d);
+  $('sendGlobal').disabled=false; $('saveGlobal').disabled=false;
+  log(`Global received (${d.length}B)`);
+}
+
+// ===== UI handlers =====
+$('reqInquiry').onclick = ()=>{
+  const ch = (parseInt($('ch').value,10)-1) & 0x0F;
+  sendSysex([0xF0,0x7E,ch,0x06,0x01,0xF7]);
+};
+$('reqCurrent').onclick = ()=> sendFunc(FUNC.REQ_CUR);
+$('sendCurrent').onclick = ()=> { if(currentDump) sendSysex(currentDump); };
+$('saveCurrent').onclick = ()=> currentDump && download(currentDump, 'R3_Current.syx');
+
+$('reqGlobal').onclick = ()=> sendFunc(FUNC.REQ_GLOBAL);
+$('sendGlobal').onclick = ()=> globalDump && sendSysex(globalDump);
+$('saveGlobal').onclick = ()=> globalDump && download(globalDump, 'R3_Global.syx');
+
+function renderProgGrid(){
+  const g=$('progs'); g.innerHTML='';
+  for(let i=0;i<128;i++){
+    const div=document.createElement('div');
+    const p = programs[i];
+    if(p){
+      const name = getProgramName(p);
+      div.className='prog';
+      div.textContent = String(i+1).padStart(3,'0')+' '+name;
+      div.title=`#${i+1} ${name} — click to send to R3`;
+      div.onclick = ()=> { sendSysex(p); log(`Sent prog ${i} "${name}"`); };
+    } else {
+      div.className='prog empty'; div.textContent=String(i+1).padStart(3,'0');
+      div.title=`#${i+1}`;
+    }
+    g.appendChild(div);
+  }
+}
+renderProgGrid();
+
+$('reqAll').onclick = ()=>{
+  allReq.active=true; allReq.idx=0; allReq.total=128;
+  $('stopAll').disabled=false; $('reqAll').disabled=true;
+  nextAllReq();
+};
+$('stopAll').onclick = ()=>{ stopAll(); };
+function stopAll(){
+  allReq.active=false; clearTimeout(allReq.timer);
+  $('stopAll').disabled=true; $('reqAll').disabled=false;
+  $('allProg').textContent = ' 停止';
+}
+function nextAllReq(){
+  if(!allReq.active) return;
+  if(allReq.idx>=allReq.total){ stopAll(); $('allProg').textContent=' 完了'; return;}
+  const no = allReq.idx;
+  $('allProg').textContent = ` 取得中… ${no+1}/128`;
+  // REQ_PROG payload: pp(LSB7), PP(MSB7) of program number
+  sendFunc(FUNC.REQ_PROG, [no & 0x7F, (no>>7) & 0x7F]);
+  const dlay = parseInt($('dlay').value,10)||120;
+  // wait either for response (auto-advance) or timeout
+  allReq.timer = setTimeout(()=>{ log(`prog ${no} タイムアウト → スキップ`); allReq.idx++; nextAllReq(); }, dlay+800);
+  // advance happens in onProgDump
+  const orig = allReq.idx;
+  const advancer = ()=>{
+    if(allReq.idx===orig){
+      allReq.idx++;
+      setTimeout(nextAllReq, dlay);
+    }
+  };
+  // hook: we replace nextAllReq trigger inside onProgDump; simpler — poll
+  // (handled in onProgDump via clearTimeout + nextAllReq)
+  // safety: also advance when response triggers
+  void advancer;
+}
+// override: when prog received, idx auto-incremented above? we used direct nextAllReq — adjust:
+const _onProgDump = onProgDump;
+onProgDump = function(d){
+  const no = (d[5]&0x7F) | ((d[6]&0x7F)<<7);
+  if(no<128){ programs[no]=new Uint8Array(d); renderProgGrid(); $('saveAll').disabled=false; }
+  log(`Prog ${no} "${getProgramName(d)}" (${d.length}B)`);
+  if(allReq.active && allReq.idx===no){
+    clearTimeout(allReq.timer);
+    allReq.idx++;
+    const dlay = parseInt($('dlay').value,10)||120;
+    setTimeout(nextAllReq, dlay);
+  }
+};
+
+$('saveAll').onclick = ()=>{
+  const parts=[];
+  for(const p of programs) if(p) parts.push(p);
+  if(!parts.length) return;
+  const total = parts.reduce((s,a)=>s+a.length,0);
+  const blob = new Uint8Array(total); let o=0;
+  for(const p of parts){ blob.set(p,o); o+=p.length; }
+  download(blob, 'R3_AllPrograms.syx');
+};
+
+// ===== file load =====
+$('file').onchange = async ev=>{
+  loadedSyx=[];
+  const files = ev.target.files;
+  let total=0;
+  for(const f of files){
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const msgs = splitSysex(buf);
+    let mine=0, prog=0, cur=0, glob=0;
+    for(const m of msgs){
+      if(m[1]===KORG && (m[2]&0xF0)===0x30 && m[3]===R3_ID){
+        mine++;
+        if(m[4]===FUNC.PROG_DUMP){
+          const no = (m[5]&0x7F)|((m[6]&0x7F)<<7);
+          if(no<128){ programs[no]=m; prog++; }
+        } else if(m[4]===FUNC.CUR_DUMP){
+          currentDump=m; cur++;
+          $('curName').textContent=' Name: "'+getProgramName(m)+'"';
+          $('sendCurrent').disabled=false; $('saveCurrent').disabled=false;
+        } else if(m[4]===FUNC.GLOBAL_DUMP){
+          globalDump=m; glob++;
+          $('sendGlobal').disabled=false; $('saveGlobal').disabled=false;
+        }
+      }
+    }
+    loadedSyx.push({name:f.name, msgs});
+    total += msgs.length;
+    log(`Loaded ${f.name}: ${msgs.length} sysex (R3: ${mine}, prog=${prog} cur=${cur} glob=${glob})`);
+  }
+  renderProgGrid();
+  $('loadedInfo').textContent = ` 計 ${total} SysEx`;
+  $('sendLoaded').disabled = total===0;
+};
+function splitSysex(buf){
+  const out=[]; let i=0;
+  while(i<buf.length){
+    if(buf[i]!==0xF0){ i++; continue; }
+    let j=i+1; while(j<buf.length && buf[j]!==0xF7) j++;
+    if(j<buf.length){ out.push(buf.slice(i, j+1)); i=j+1; } else break;
+  }
+  return out;
+}
+$('sendLoaded').onclick = async ()=>{
+  const dlay = parseInt($('dlay').value,10)||120;
+  for(const f of loadedSyx){
+    log('Send file: '+f.name);
+    for(const m of f.msgs){
+      sendSysex(m);
+      await new Promise(r=>setTimeout(r, dlay));
+    }
+  }
+  log('Send loaded 完了');
+};
+
+// ===== Parameter Change =====
+$('sendParam').onclick = ()=>{
+  const id = parseInt($('pid').value,16) & 0x3FFF;
+  const sid = parseInt($('psid').value,16) & 0x3FFF;
+  let v = parseInt($('pval').value,10);
+  v = v & 0x3FFF;
+  sendFunc(FUNC.PARAM, [
+    id & 0x7F, (id>>7)&0x7F,
+    sid & 0x7F, (sid>>7)&0x7F,
+    v & 0x7F, (v>>7)&0x7F,
+  ]);
+};
+
+function download(bytes, name){
+  const blob = new Blob([bytes], {type:'application/octet-stream'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+
+$('inSel').onchange = selectPorts;
+$('outSel').onchange = selectPorts;
+$('clearLog').onclick = ()=> $('log').innerHTML='';
+$('midiToggle').onclick = ()=>{
+  midiEnabled = !midiEnabled;
+  const btn=$('midiToggle');
+  btn.textContent = 'MIDI: '+(midiEnabled?'ON':'OFF');
+  btn.style.background = midiEnabled ? '' : '#5a2222';
+  log('MIDI '+(midiEnabled?'有効化':'無効化（送受信ブロック）'));
+};
+
+// ===================== Editor (Timbre 1/2) =====================
+// Parameter spec for one Timbre. `off` is the offset within the 164-byte Timbre block.
+// `id` is the Parameter Change ID *low nibble base* (0/1/3/4 = program/patch/fx/motionseq).
+// For Timbre1 actual ID = 0x10|id ; Timbre2 = 0x20|id.
+// type: 'k' knob (0-127), 'kb' bipolar knob (centred at `center`, span ±halfspan), 's' select.
+// For packed bitfields: provide `mask` (within byte) and `shift`.
+const T_SPEC = [
+  {grp:'Common', items:[
+    {l:'Knob1 Asgn',  off:0,  id:0, sub:0x00, type:'k', max:55},
+    {l:'Knob2 Asgn',  off:1,  id:0, sub:0x01, type:'k', max:55},
+    {l:'Knob3 Asgn',  off:2,  id:0, sub:0x02, type:'k', max:55},
+    {l:'Knob4 Asgn',  off:3,  id:0, sub:0x03, type:'k', max:55},
+  ]},
+  {grp:'Voice', items:[
+    {l:'Unison Voi',  off:4, mask:0x0F, id:0, sub:0x08, type:'s', opts:['Off','2','3','4']},
+    {l:'Uni Detune',  off:5,  id:0, sub:0x09, type:'k', max:99},
+    {l:'Uni Spread',  off:6,  id:0, sub:0x0A, type:'k'},
+    {l:'Voice Asgn',  off:7, mask:0xC0, shift:6, id:0, sub:0x0B, type:'s', opts:['Mono1','Mono2','Poly']},
+  ]},
+  {grp:'Pitch', items:[
+    {l:'Analog Tun',  off:9,  id:0, sub:0x13, type:'k'},
+    {l:'Transpose',   off:10, id:0, sub:0x14, type:'kb', center:64, half:48},
+    {l:'Detune',      off:11, id:0, sub:0x15, type:'kb', center:64, half:50},
+    {l:'Vibrato Int', off:12, id:0, sub:0x16, type:'kb', center:64, half:63},
+    {l:'Bend Range',  off:13, id:0, sub:0x10, type:'kb', center:64, half:12},
+    {l:'Porta Time',  off:14, id:0, sub:0x11, type:'k'},
+  ]},
+  {grp:'OSC1', items:[
+    {l:'Wave',     off:16, mask:0x0F, id:0, sub:0x17, type:'s', opts:['Saw','Squ','Tri','Sin','Vox','DWGS','Noise','AudioIn']},
+    {l:'OSC Mod',  off:16, mask:0x30, shift:4, id:0, sub:0x18, type:'s', opts:['Waveform','Cross','Unison','VPM']},
+    {l:'Ctrl1',    off:17, id:0, sub:0x19, type:'k'},
+    {l:'Ctrl2',    off:18, id:0, sub:0x1A, type:'k'},
+    {l:'DWGS',     off:19, id:0, sub:0x1B, type:'k', max:63},
+  ]},
+  {grp:'OSC2', items:[
+    {l:'Wave',     off:21, mask:0x03, id:0, sub:0x20, type:'s', opts:['Saw','Squ','Tri','Sin']},
+    {l:'Mod Sel',  off:21, mask:0x30, shift:4, id:0, sub:0x21, type:'s', opts:['Off','Ring','Sync','RingSync']},
+    {l:'Semitone', off:22, id:0, sub:0x22, type:'kb', center:64, half:24},
+    {l:'Tune',     off:23, id:0, sub:0x23, type:'kb', center:64, half:63},
+  ]},
+  {grp:'Mixer', items:[
+    {l:'OSC1 Lvl', off:24, id:0, sub:0x28, type:'k'},
+    {l:'OSC2 Lvl', off:25, id:0, sub:0x29, type:'k'},
+    {l:'Noise Lvl',off:26, id:0, sub:0x2A, type:'k'},
+  ]},
+  {grp:'Filter', items:[
+    {l:'Routing', off:28, mask:0x03, id:0, sub:0x30, type:'s', opts:['Single','Serial','Parallel','Indiv']},
+    {l:'F2 Type', off:28, mask:0x30, shift:4, id:0, sub:0x40, type:'s', opts:['LPF','HPF','BPF','COMB']},
+    {l:'F1 Bal',  off:29, id:0, sub:0x31, type:'k'},
+    {l:'F1 Cutoff', off:30, id:0, sub:0x32, type:'k'},
+    {l:'F1 Reso',   off:31, id:0, sub:0x33, type:'k'},
+    {l:'F1 EG1Int', off:32, id:0, sub:0x34, type:'kb', center:64, half:63},
+    {l:'F1 KbdTrk', off:33, id:0, sub:0x35, type:'kb', center:64, half:63},
+    {l:'F1 VelSns', off:34, id:0, sub:0x36, type:'kb', center:64, half:63},
+    {l:'F2 Cutoff', off:35, id:0, sub:0x42, type:'k'},
+    {l:'F2 Reso',   off:36, id:0, sub:0x43, type:'k'},
+    {l:'F2 EG1Int', off:37, id:0, sub:0x44, type:'kb', center:64, half:63},
+    {l:'F2 KbdTrk', off:38, id:0, sub:0x45, type:'kb', center:64, half:63},
+    {l:'F2 VelSns', off:39, id:0, sub:0x46, type:'kb', center:64, half:63},
+  ]},
+  {grp:'Amp', items:[
+    {l:'Level',   off:40, id:0, sub:0x50, type:'k'},
+    {l:'Drv Pos', off:41, mask:0x30, shift:4, id:0, sub:0x52, type:'s', opts:['PreFlt1','PreAmp']},
+    {l:'WS Type', off:42, mask:0x0F, id:0, sub:0x51, type:'s',
+      opts:['Off','Drive','Decimator','HardClip','OctSaw','MultiTri','MultiSin','SubOSCSaw','SubOSCSqu','SubOSCTri','SubOSCSin','LevelBoost','Decimator2']},
+    {l:'Depth',   off:43, id:0, sub:0x54, type:'k'},
+    {l:'Panpot',  off:44, id:0, sub:0x55, type:'kb', center:64, half:63},
+    {l:'KeyTrk',  off:45, id:0, sub:0x56, type:'kb', center:64, half:63},
+    {l:'Punch',   off:46, id:0, sub:0x57, type:'k'},
+  ]},
+  {grp:'EG1', items:[
+    {l:'Attack',  off:48, id:0, sub:0x60, type:'k'},
+    {l:'Decay',   off:49, id:0, sub:0x61, type:'k'},
+    {l:'Sustain', off:50, id:0, sub:0x62, type:'k'},
+    {l:'Release', off:51, id:0, sub:0x63, type:'k'},
+    {l:'LvlVelSns',off:52, id:0, sub:0x64, type:'kb', center:64, half:63},
+  ]},
+  {grp:'EG2', items:[
+    {l:'Attack',  off:54, id:0, sub:0x70, type:'k'},
+    {l:'Decay',   off:55, id:0, sub:0x71, type:'k'},
+    {l:'Sustain', off:56, id:0, sub:0x72, type:'k'},
+    {l:'Release', off:57, id:0, sub:0x73, type:'k'},
+    {l:'LvlVelSns',off:58, id:0, sub:0x74, type:'kb', center:64, half:63},
+  ]},
+  {grp:'EG3', items:[
+    {l:'Attack',  off:60, id:0, sub:0x80, type:'k'},
+    {l:'Decay',   off:61, id:0, sub:0x81, type:'k'},
+    {l:'Sustain', off:62, id:0, sub:0x82, type:'k'},
+    {l:'Release', off:63, id:0, sub:0x83, type:'k'},
+    {l:'LvlVelSns',off:64, id:0, sub:0x84, type:'kb', center:64, half:63},
+  ]},
+  {grp:'LFO1', items:[
+    {l:'Wave',    off:66, mask:0x0F, id:0, sub:0x90, type:'s', opts:['Saw','Squ','Tri','S/H','Random']},
+    {l:'Freq',    off:67, id:0, sub:0x92, type:'k'},
+    {l:'BPM Sync',off:68, mask:0x80, shift:7, id:0, sub:0x93, type:'s', opts:['Off','On']},
+    {l:'Key Sync',off:68, mask:0x60, shift:5, id:0, sub:0x94, type:'s', opts:['Off','Timbre','Voice']},
+    {l:'Sync Nt', off:69, mask:0x1F, id:0, sub:0x96, type:'k', max:16},
+  ]},
+  {grp:'LFO2', items:[
+    {l:'Wave',    off:70, mask:0x0F, id:0, sub:0xA0, type:'s', opts:['Saw','Squ','Sin','S/H','Random']},
+    {l:'Freq',    off:71, id:0, sub:0xA2, type:'k'},
+    {l:'BPM Sync',off:72, mask:0x80, shift:7, id:0, sub:0xA3, type:'s', opts:['Off','On']},
+    {l:'Key Sync',off:72, mask:0x60, shift:5, id:0, sub:0xA4, type:'s', opts:['Off','Timbre','Voice']},
+    {l:'Sync Nt', off:73, mask:0x1F, id:0, sub:0xA6, type:'k', max:16},
+  ]},
+];
+// Patch x6 (id=1)
+const PATCH_SRC = ['EG1','EG2','EG3','LFO1','LFO2','Velocity','PitchBend','ModWheel','KbdTrack','MIDI1','MIDI2','MIDI3'];
+const PATCH_DST = ['Pitch','OSC2 Pitch','OSC1 Ctrl','OSC1 Lvl','OSC2 Lvl','Noise Lvl','Flt1 Type','Flt1 Cutoff','Flt1 Reso','Flt2 Cutoff','Drv/WS Dpt','Amp Lvl','Panpot','LFO1 Freq','LFO2 Freq'];
+for(let i=0;i<6;i++){
+  T_SPEC.push({grp:'Patch'+(i+1), items:[
+    {l:'Source', off:74+i*3, id:1, sub:i*4+0, type:'s', opts:PATCH_SRC},
+    {l:'Dest',   off:75+i*3, id:1, sub:i*4+1, type:'s', opts:PATCH_DST},
+    {l:'Intens', off:76+i*3, id:1, sub:i*4+2, type:'kb', center:64, half:63},
+  ]});
+}
+
+let curTimbre = 1;             // 1 or 2
+let editorWidgets = [];        // {item, set(value), el}
+
+// Header offsets of Timbre data in the unpacked program data.
+// Program dump (current): F0,42,3g,7D,40, <packed>, F7
+// Unpack to 452-byte block. T1 = bytes 16..179, T2 = 180..343.
+function getUnpackedCurrent(){
+  if(!currentDump) return null;
+  const packed = currentDump.slice(5, currentDump.length-1);
+  return unpack7to8(packed);
+}
+function timbreOffset(t){ return t===1 ? 16 : 180; }
+function idForTimbre(t, idLow){ return (t===1 ? 0x10 : 0x20) | (idLow & 0x0F); }
+
+// ===== SVG knob =====
+function makeKnob(item, onChange){
+  const wrap = document.createElement('div'); wrap.className='knob';
+  const lbl = document.createElement('div'); lbl.className='lbl'; lbl.textContent=item.l;
+  wrap.appendChild(lbl);
+
+  if(item.type==='s'){
+    const sel = document.createElement('select');
+    item.opts.forEach((o,i)=>{ const op=document.createElement('option'); op.value=i; op.textContent=o; sel.appendChild(op); });
+    wrap.appendChild(sel);
+    sel.onchange = ()=> onChange(parseInt(sel.value,10));
+    return { el:wrap, set:v=>{ sel.value=v; }, get:()=>parseInt(sel.value,10) };
+  }
+
+  const max = item.max ?? 127;
+  const isBi = item.type==='kb';
+  const ns='http://www.w3.org/2000/svg';
+  const SZ=28, C=14, R=11, RI=7, RO=10;
+  const svg=document.createElementNS(ns,'svg'); svg.setAttribute('width',SZ); svg.setAttribute('height',SZ); svg.setAttribute('viewBox',`0 0 ${SZ} ${SZ}`);
+  const bg=document.createElementNS(ns,'circle'); bg.setAttribute('cx',C); bg.setAttribute('cy',C); bg.setAttribute('r',C-2);
+  bg.setAttribute('fill','#15151a'); bg.setAttribute('stroke','#444'); bg.setAttribute('stroke-width','1');
+  svg.appendChild(bg);
+  const trk=document.createElementNS(ns,'path'); trk.setAttribute('fill','none'); trk.setAttribute('stroke','#333'); trk.setAttribute('stroke-width','2');
+  trk.setAttribute('d', arcPath(C,C,R, -135, 135));
+  svg.appendChild(trk);
+  const arc=document.createElementNS(ns,'path'); arc.setAttribute('fill','none'); arc.setAttribute('stroke','#6af'); arc.setAttribute('stroke-width','2.5'); arc.setAttribute('stroke-linecap','round');
+  svg.appendChild(arc);
+  const ind=document.createElementNS(ns,'line'); ind.setAttribute('stroke','#fff'); ind.setAttribute('stroke-width','1.5'); ind.setAttribute('stroke-linecap','round');
+  svg.appendChild(ind);
+  wrap.appendChild(svg);
+  const val=document.createElement('div'); val.className='val'; wrap.appendChild(val);
+
+  let value = isBi ? (item.center ?? 64) : 0;
+  function update(){
+    const norm = value / max;                       // 0..1
+    const ang = -135 + norm * 270;                  // -135..+135 deg
+    const rad = ang*Math.PI/180;
+    ind.setAttribute('x1', C+Math.sin(rad)*RI);
+    ind.setAttribute('y1', C-Math.cos(rad)*RI);
+    ind.setAttribute('x2', C+Math.sin(rad)*RO);
+    ind.setAttribute('y2', C-Math.cos(rad)*RO);
+    if(isBi){
+      const c = item.center ?? 64;
+      const cAng = -135 + (c/max)*270;
+      const lo=Math.min(cAng,ang), hi=Math.max(cAng,ang);
+      arc.setAttribute('d', arcPath(C,C,R, lo, hi));
+      val.textContent = (value - c) + '';
+    } else {
+      arc.setAttribute('d', arcPath(C,C,R, -135, ang));
+      val.textContent = value+'';
+    }
+  }
+  function setV(v, fire){
+    v = Math.max(0, Math.min(max, v|0));
+    if(v===value) return;
+    value = v; update();
+    if(fire) onChange(value);
+  }
+  // drag (global listeners — more robust)
+  let dragY=null, dragV=0;
+  const onMove = e=>{
+    if(dragY==null) return;
+    const dy = dragY - e.clientY;
+    const step = e.shiftKey ? 0.25 : 1.0;
+    setV(dragV + dy*step, true);
+  };
+  const onUp = ()=>{ if(dragY!=null){ dragY=null; svg.style.outline=''; } };
+  svg.addEventListener('pointerdown', e=>{
+    dragY=e.clientY; dragV=value; svg.style.outline='1px solid #6af'; e.preventDefault();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, {once:true});
+  });
+  svg.addEventListener('wheel', e=>{
+    e.preventDefault();
+    setV(value + (e.deltaY<0?1:-1)*(e.shiftKey?5:1), true);
+  }, {passive:false});
+  svg.addEventListener('dblclick', ()=> setV(isBi?(item.center ?? 64):0, true));
+  update();
+  return { el:wrap, set:v=>setV(v,false), get:()=>value };
+}
+function arcPath(cx,cy,r, a1, a2){
+  const r1=a1*Math.PI/180, r2=a2*Math.PI/180;
+  const x1=cx+r*Math.sin(r1), y1=cy-r*Math.cos(r1);
+  const x2=cx+r*Math.sin(r2), y2=cy-r*Math.cos(r2);
+  const large = Math.abs(a2-a1)>180 ? 1:0;
+  const sweep = a2>a1 ? 1:0;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} ${sweep} ${x2} ${y2}`;
+}
+
+function renderEditor(){
+  const ed = $('editor'); ed.innerHTML='';
+  editorWidgets = [];
+  for(const g of T_SPEC){
+    const box = document.createElement('div'); box.className='grp';
+    const h = document.createElement('h3'); h.textContent=g.grp; box.appendChild(h);
+    const wrap = document.createElement('div'); wrap.className='knobs'; box.appendChild(wrap);
+    for(const it of g.items){
+      const w = makeKnob(it, v => onEditChange(it, v));
+      wrap.appendChild(w.el);
+      editorWidgets.push({item:it, w});
+    }
+    ed.appendChild(box);
+  }
+}
+renderEditor();
+
+function paramPayload(id14, sid14, val){
+  const idL=id14&0x7F, idM=(id14>>7)&0x7F;
+  const sL=sid14&0x7F, sM=(sid14>>7)&0x7F;
+  const vL=val&0x7F,   vM=(val>>7)&0x7F;
+  if($('byteOrder').value==='msb'){
+    return [idM,idL,sM,sL,vM,vL];
+  }
+  return [idL,idM,sL,sM,vL,vM];
+}
+function onEditChange(item, v){
+  const id14 = idForTimbre(curTimbre, item.id);
+  const sid14 = item.sub & 0x3FFF;
+  const val = v & 0x3FFF;
+  sendFunc(FUNC.PARAM, paramPayload(id14, sid14, val));
+  if($('logParam').checked) log(`TX param T${curTimbre} ID=${hex(id14>>0)} Sub=${hex(sid14)} val=${v} [${item.l}]`);
+}
+
+// Pull values from current dump (現在のTimbreタブに対して)
+function pullToEditor(){
+  const unp = getUnpackedCurrent();
+  if(!unp) return false;
+  const base = timbreOffset(curTimbre);
+  for(const ew of editorWidgets){
+    const it = ew.item;
+    const byte = unp[base + it.off];
+    let v;
+    if(it.mask){ v = (byte & it.mask) >> (it.shift||0); }
+    else { v = byte & 0x7F; }
+    ew.w.set(v);
+  }
+  return true;
+}
+$('pullCur').onclick = ()=>{
+  if(pullToEditor()) log(`Timbre${curTimbre} 値を反映`);
+  else log('Current Dump 未取得');
+};
+
+// Tab switch — 自動で値再反映
+$('edTabs').addEventListener('click', e=>{
+  const t = e.target.closest('.tab'); if(!t) return;
+  document.querySelectorAll('#edTabs .tab').forEach(x=>x.classList.toggle('active', x===t));
+  curTimbre = t.dataset.tab==='t1' ? 1 : 2;
+  pullToEditor();   // タブ切替時に該当Timbreの値へ自動更新
+});
+
+// Sync from received Parameter Change (41h)
+const _onMidi = onMidi;
+onMidi = function(e){
+  _onMidi(e);
+  const d = e.data;
+  if(d[0]!==0xF0 || d[1]!==KORG || (d[2]&0xF0)!==0x30 || d[3]!==R3_ID) return;
+  if(d[4]!==FUNC.PARAM || d.length<12) return;
+  let id14, sid14, v;
+  if($('byteOrder').value==='msb'){
+    id14 = (d[6]&0x7F) | ((d[5]&0x7F)<<7);
+    sid14= (d[8]&0x7F) | ((d[7]&0x7F)<<7);
+    v    = (d[10]&0x7F) | ((d[9]&0x7F)<<7);
+  } else {
+    id14 = (d[5]&0x7F) | ((d[6]&0x7F)<<7);
+    sid14= (d[7]&0x7F) | ((d[8]&0x7F)<<7);
+    v    = (d[9]&0x7F) | ((d[10]&0x7F)<<7);
+  }
+  if($('logParam').checked) log(`RX param ID=${hex(id14)} Sub=${hex(sid14)} val=${v}`);
+  // Determine timbre from high nibble of ID
+  const high = id14 & 0xF0;
+  let t = 0;
+  if(high===0x10) t=1; else if(high===0x20) t=2; else return;
+  if(t!==curTimbre) return;
+  const idLow = id14 & 0x0F;
+  for(const ew of editorWidgets){
+    if(ew.item.id===idLow && ew.item.sub===sid14){ ew.w.set(v); break; }
+  }
+};
+if(input) input.onmidimessage = onMidi;
+
+initMIDI();
+</script>
+</body>
+</html>

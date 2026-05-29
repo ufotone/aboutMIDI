@@ -680,6 +680,11 @@ function renderRemote(){
     g.appendChild(b);
   });
 }
+let reqVoiceTimer = 0;
+function reqVoiceDebounced(no){
+  clearTimeout(reqVoiceTimer);
+  reqVoiceTimer = setTimeout(()=> reqVoice(no), 180);  // 連打吸収
+}
 function renderVoices(){
   const g=$('voices'); g.innerHTML='';
   VOICES.forEach((n,i)=>{
@@ -687,7 +692,8 @@ function renderVoices(){
     d.textContent = String(i).padStart(2,'0')+' '+n;
     d.onclick = ()=>{ curVoice=i; renderVoices(); updateVoiceName();
       const nn = (noteAssign && noteAssign[i]!=null) ? noteAssign[i] : NOTE_NUMBERS[i];
-      if(nn!=null) $('testNote').value = nn; };
+      if(nn!=null) $('testNote').value = nn;
+      reqVoiceDebounced(i); };  // 選択ごとに本体から現在値を取得→エディタ反映（デバウンス付）
     g.appendChild(d);
   });
 }

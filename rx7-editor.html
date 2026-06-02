@@ -63,6 +63,11 @@
   details.sec > summary::before { content:'▸ '; color:#9bd; }
   details.sec[open] > summary::before { content:'▾ '; }
   details.sec h2 { margin:10px 0 4px; }
+  #patGrid { display:grid; grid-template-columns:repeat(20,1fr); gap:1px; margin-top:4px; max-width:560px; }
+  .pcell { background:#222; border:1px solid #333; font-size:9px; text-align:center; padding:1px 0;
+           border-radius:2px; color:#666; cursor:default; }
+  .pcell.held { background:#1e3a1e; color:#cfe; border-color:#3a6a3a; cursor:pointer; }
+  .pcell.held:hover { background:#2a5a2a; }
 </style>
 </head>
 <body>
@@ -145,6 +150,22 @@
 <details class="sec">
   <summary>System Setup</summary>
   <div id="sysEd"></div>
+</details>
+
+<details class="sec">
+  <summary>Pattern Dump (Load / Save)</summary>
+  <div class="row" style="font-size:11px;">
+    <span>Request</span>
+    <input id="patFrom" type="number" min="0" max="99" value="0" style="width:48px">–
+    <input id="patTo" type="number" min="0" max="99" value="99" style="width:48px">
+    <button id="rqPatRange">from RX7</button>
+    <button id="patSave">Save .syx</button>
+    <input type="file" id="patFile" accept=".syx,application/octet-stream" multiple style="font-size:11px">
+    <button id="patSend">Send held to RX7</button>
+    <button id="patClear">Clear</button>
+    <span id="patInfo" style="color:#9bd"></span>
+  </div>
+  <div id="patGrid"></div>
 </details>
 
 <h2>Remote Switch</h2>
@@ -382,6 +403,7 @@ function handleSysex(d){
     if(hdr.startsWith('LM  8515P')){
       const pn = d[hdrStart+9] & 0x7F;
       patterns[pn] = d;
+      renderPatGrid();
       log(`Pattern ${pn} Received (${d.length}B) `);
     } else if(hdr.startsWith('LM  8515V')){
       const vn = d[hdrStart+9] & 0x7F;
@@ -897,6 +919,57 @@ $('sendAll').onclick = async ()=>{
   log('Send loaded 完了');
 };
 
+// === Pattern dump (load / save) ===
+function renderPatGrid(){
+  const g=$('patGrid'); g.innerHTML='';
+  let held=0;
+  for(let i=0;i<100;i++){
+    const c=document.createElement('div'); c.textContent=pad2(i);
+    if(patterns[i]){ c.className='pcell held'; held++; c.title=`Pattern ${i} — click to send to RX7`;
+      c.onclick=()=>{ send(patterns[i]); log(`Sent Pattern ${i}`); }; }
+    else c.className='pcell';
+    g.appendChild(c);
+  }
+  $('patInfo').textContent = held ? `${held} held` : '';
+}
+let patReqBusy=false;
+$('rqPatRange').onclick = async ()=>{
+  if(patReqBusy) return;
+  let a=parseInt($('patFrom').value,10)||0, b=parseInt($('patTo').value,10)||0;
+  a=Math.max(0,Math.min(99,a)); b=Math.max(0,Math.min(99,b)); if(b<a){ const t=a;a=b;b=t; }
+  patReqBusy=true; $('rqPatRange').disabled=true;
+  for(let i=a;i<=b;i++){ reqPattern(i); await new Promise(r=>setTimeout(r,250)); }
+  patReqBusy=false; $('rqPatRange').disabled=false;
+  log(`Pattern request ${a}-${b} done`);
+};
+$('patSave').onclick = ()=>{
+  const parts = patterns.filter(p=>p);
+  if(!parts.length){ log('No pattern data'); return; }
+  const total = parts.reduce((s,a)=>s+a.length,0);
+  const out=new Uint8Array(total); let o=0; for(const p of parts){ out.set(p,o); o+=p.length; }
+  download(out, `RX7_Patterns_${new Date().toISOString().slice(0,10)}.syx`);
+};
+$('patFile').onchange = async ev=>{
+  let n=0;
+  for(const f of ev.target.files){
+    const msgs = splitSysex(new Uint8Array(await f.arrayBuffer()));
+    for(const m of msgs){
+      if(m[1]===YAMAHA && (m[2]&0xF0)===0x00){
+        const hdr=String.fromCharCode(...m.slice(6,16));
+        if(hdr.startsWith('LM  8515P')){ patterns[m[15]&0x7F]=m; n++; }
+      }
+    }
+  }
+  renderPatGrid(); log(`Loaded ${n} pattern(s) from file`);
+};
+$('patSend').onclick = async ()=>{
+  const parts = patterns.map((p,i)=>p?{i,p}:null).filter(x=>x);
+  if(!parts.length){ log('No pattern to send'); return; }
+  for(const {i,p} of parts){ send(p); log(`Sent Pattern ${i}`); await new Promise(r=>setTimeout(r,200)); }
+  log('Send patterns done');
+};
+$('patClear').onclick = ()=>{ patterns.fill(null); renderPatGrid(); log('Pattern buffer cleared'); };
+
 // === Note test ===
 function nOn(){ if(!output) return; const n=parseInt($('testNote').value,10), v=parseInt($('testVel').value,10); output.send([0x90, n&0x7F, v&0x7F]); }
 function nOff(){ if(!output) return; const n=parseInt($('testNote').value,10); output.send([0x80, n&0x7F, 0]); }
@@ -908,6 +981,7 @@ $('clearLog').onclick = ()=> $('log').innerHTML='';
 // init
 renderVoices(); updateVoiceName();
 renderVoiceEdit(); renderPerfEdit(); renderSysEdit(); renderRemote();
+renderPatGrid();
 setLCD(' YAMAHA  RX7', '  Web Editor');
 initMIDI();
 </script>

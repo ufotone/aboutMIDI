@@ -47,25 +47,50 @@
   .remote { background:#262c2e; padding:6px; border-radius:5px; }
   #ioSection button { background:#5d5d5d; }
   #ioSection button:hover:not(:disabled) { background:#6d6d6d; }
+  /* LCD1602 display */
+  #lcdWrap { display:inline-block; background:#0c0c0c; padding:10px 12px; border-radius:6px;
+             border:2px solid #000; box-shadow:0 2px 6px rgba(0,0,0,.5) inset, 0 1px 2px rgba(0,0,0,.6); }
+  .lcd { background:#9fc20b; padding:8px 10px; border-radius:3px; line-height:1.45;
+         box-shadow:0 0 0 1px #5e7400 inset; }
+  .lcdline { font: 700 22px/1.45 "DejaVu Sans Mono","Consolas",ui-monospace,monospace;
+             letter-spacing:3px; white-space:pre; color:#16240a;
+             text-shadow:0 0 1px rgba(20,40,0,.4); }
+  /* collapsible sections */
+  details.sec { margin:8px 0; }
+  details.sec > summary { font-size:13px; color:#9bd; border-bottom:1px solid #333;
+             padding:3px 4px; margin-bottom:6px; cursor:pointer; list-style:none; user-select:none; }
+  details.sec > summary::-webkit-details-marker { display:none; }
+  details.sec > summary::before { content:'▸ '; color:#9bd; }
+  details.sec[open] > summary::before { content:'▾ '; }
+  details.sec h2 { margin:10px 0 4px; }
 </style>
 </head>
 <body>
-<h1>YAMAHA RX7 Web MIDI Editor / Librarian <span class="pill" id="midiState">未接続</span></h1>
+<h1>YAMAHA RX7 Web MIDI Editor / Librarian <span class="pill" id="midiState">disconnect</span></h1>
 
 <div class="row">
   <label>Input: <select id="inSel"></select></label>
   <label>Output: <select id="outSel"></select></label>
-  <label>Device# (本体表示と同じ値): <input id="dev" type="number" min="1" max="16" value="1"></label>
+  <label>RX7 Device#: <input id="dev" type="number" min="1" max="16" value="1"></label>
 </div>
 
-<h2>Log</h2>
-<div class="row">
-  <button id="clearLog">Clear</button>
-  <label><input type="checkbox" id="logSysex" checked> SysEx</label>
-  <label><input type="checkbox" id="logParam" checked> Param</label>
-  <label><input type="checkbox" id="logNotes"> Notes</label>
+<div id="lcdWrap" title="RX7 Parameter Change LCD">
+  <div class="lcd">
+    <div class="lcdline" id="lcd0">                </div>
+    <div class="lcdline" id="lcd1">                </div>
+  </div>
 </div>
-<div id="log"></div>
+
+<details class="sec">
+  <summary>Log</summary>
+  <div class="row">
+    <button id="clearLog">Clear</button>
+    <label><input type="checkbox" id="logSysex"> SysEx</label>
+    <label><input type="checkbox" id="logParam"> Param</label>
+    <label><input type="checkbox" id="logNotes"> Notes</label>
+  </div>
+  <div id="log"></div>
+</details>
 
 <h2>Receive / Save / Load / Send</h2>
 <div style="font-size:11px; color:#c80; border:1px solid #553; background:#2a2410; border-radius:4px; padding:5px 8px; margin:4px 0;">
@@ -93,32 +118,36 @@
   </fieldset>
 </div>
 
-<h2>Voices (100) — クリックで編集対象を選択</h2>
-<div id="voices"></div>
+<details class="sec" open>
+  <summary>Voice (Select / Test / Edit / Performance)</summary>
 
-<h2>Note Test (Channel 1)</h2>
-<div class="row">
-  <label>Note: <input id="testNote" type="number" min="0" max="127" value="36"></label>
-  <label>Velocity: <input id="testVel" type="number" min="1" max="127" value="100"></label>
-  <button id="noteOn">Note On</button>
-  <button id="noteOff">Note Off</button>
-  <button id="midiStart">Start (FA)</button>
-  <button id="midiStop">Stop (FC)</button>
-</div>
+  <h2>Voices (100)</h2>
+  <div id="voices"></div>
 
-<h2>Voice Edit (Group 81 — ノブ操作で即送信)</h2>
-<div class="row">
-  <span id="voiceName">Voice: -</span>
-</div>
-<div id="voiceEd"></div>
+  <h2>Voice Test (Channel 1)</h2>
+  <div class="row">
+    <label>Note: <input id="testNote" type="number" min="0" max="127" value="36"></label>
+    <label>Velocity: <input id="testVel" type="number" min="1" max="127" value="100"></label>
+    <button id="noteOn">Note On</button>
+    <button id="noteOff">Note Off</button>
+  </div>
 
-<h2>Voice Performance (Group 82 — TX ch / Note# / Bend / Accent)</h2>
-<div id="perfEd"></div>
+  <h2>Voice Edit</h2>
+  <div class="row">
+    <span id="voiceName">Voice: -</span>
+  </div>
+  <div id="voiceEd"></div>
 
-<h2>System Setup (Group 83)</h2>
-<div id="sysEd"></div>
+  <h2>Voice Performance (TX ch / Note# / Bend / Accent)</h2>
+  <div id="perfEd"></div>
+</details>
 
-<h2>Remote Switch (Group 80 — 前面ボタン押下シミュレート)</h2>
+<details class="sec">
+  <summary>System Setup</summary>
+  <div id="sysEd"></div>
+</details>
+
+<h2>Remote Switch</h2>
 <div class="remote" id="remoteBtns"></div>
 
 <script>
@@ -176,7 +205,7 @@ const NOTE_NUMBERS = [
 ];
 
 // === Parameter specs ===
-// Voice Edit (Group 81)
+// Voice Edit
 const VOICE_EDIT = [
   {p:0,  l:'Pitch',     type:'pitch',  min:-3600, max:2400, step:10},
   {p:1,  l:'Decay',     type:'u',      min:1,   max:32},
@@ -201,7 +230,7 @@ const VOICE_EDIT = [
   {p:20, l:'4th Pan',   type:'s',      min:-14, max:14},
 ];
 
-// Voice Performance (Group 82) — per voice
+// Voice Performance— per voice
 const VOICE_PERF = [
   {p:0, l:'TX Ch',     type:'ch', min:1,  max:16},   // 表示1-16, 送信時 -1 (data 0-15)
   {p:1, l:'Note#',     type:'u', min:0,  max:127},
@@ -210,7 +239,7 @@ const VOICE_PERF = [
   {p:4, l:'Accent 2',  type:'s', min:-63,max:63},
 ];
 
-// System Setup (Group 83)
+// System Setup
 const QUANT_OPTS = ['1/2','1/4','1/6','1/8','1/12','1/16','1/24','1/32','1/48','off'];
 const SYS_SETUP = [
   {p:0, l:'Quantize',  type:'enum', opts:QUANT_OPTS},
@@ -269,9 +298,9 @@ async function initMIDI(){
     $('midiState').textContent = 'MIDI Ready';
     $('midiState').className = 'pill ok';
   }catch(e){
-    $('midiState').textContent = 'MIDI不可';
+    $('midiState').textContent = 'MIDI NG';
     $('midiState').className = 'pill ng';
-    log('Web MIDI 取得失敗: '+e.message);
+    log('Web MIDI failure: '+e.message);
   }
 }
 function refreshPorts(){
@@ -291,7 +320,7 @@ $('inSel').onchange = selectPorts;
 $('outSel').onchange = selectPorts;
 
 function send(bytes){
-  if(!output){ log('Output未選択'); return; }
+  if(!output){ log('Output Not selected'); return; }
   output.send(bytes);
   if($('logSysex').checked && bytes[0]===0xF0) log('TX '+hexs(bytes.slice(0,Math.min(24,bytes.length)))+(bytes.length>24?` … (${bytes.length}B)`:''));
 }
@@ -341,7 +370,7 @@ function handleSysex(d){
   const sub = d[2] & 0xF0;
   const ch  = d[2] & 0x0F;
   if($('logSysex').checked) log(`RX SysEx sub=${hex(sub)} dev=${ch} len=${d.length}`);
-  receivedSyx.push(d);
+  if(sub===0x00) receivedSyx.push(d);  // バルクダンプのみ保存対象（Param echoは除外）
 
   if(sub===0x00){
     // bulk dump (format byte at d[3])
@@ -353,28 +382,66 @@ function handleSysex(d){
     if(hdr.startsWith('LM  8515P')){
       const pn = d[hdrStart+9] & 0x7F;
       patterns[pn] = d;
-      log(`Pattern ${pn} 受信 (${d.length}B) — 保持のみ`);
+      log(`Pattern ${pn} Received (${d.length}B) `);
     } else if(hdr.startsWith('LM  8515V')){
       const vn = d[hdrStart+9] & 0x7F;
       voiceDumps[vn] = d;
-      log(`Voice ${vn} ${VOICES[vn]||''} 受信 (全${d.length}B)`);
+      log(`Voice ${vn} ${VOICES[vn]||''} Received (Total${d.length}B)`);
       curVoice = vn; renderVoices(); updateVoiceName();
       parseVoiceBulkToEditor(d);
     } else if(hdr.startsWith('LM  8515SY')){
       lastSetup = d;
-      log('Setup data 受信');
+      log('Setup data Received');
       parseSetupNotes(d);
     } else if(hdr.startsWith('LM  8515')){
       lastSV = d;
-      log(`Seq&Voice 受信 (${d.length}B)`);
+      log(`Seq&Voice Received (${d.length}B)`);
     } else {
       log('Unknown bulk header: '+hdr);
     }
   } else if(sub===0x10){
-    // param change echo — 全バイトをHEXで出す
-    log(`RX PARAM (${d.length}B): ${hexs(d)}`);
+    handleParamChange(d);
   } else if(sub===0x20){
     log('Dump request received');
+  }
+}
+
+// 受信 Parameter Change を解釈
+function handleParamChange(d){
+  const grp = d[4];
+  if(grp===0x51){            // Voice Edit: 51 vv pp dd [dd]
+    const voice=d[5], param=d[6];
+    const spec=VOICE_EDIT.find(s=>s.p===param);
+    let v;
+    if(spec && spec.type==='pitch') v=decParamPitch(d[7], d[8]);
+    else if(spec && spec.type==='s') v=decS7(d[7]);
+    else v=d[7];
+    if(voice===curVoice){ const ew=voiceWidgets.find(x=>x.spec.p===param); if(ew) ew.w.set(v); }
+    lcdVoiceEdit(param, voice, v);
+    if($('logParam').checked) log(`RX VoiceEdit v${voice}.${spec?spec.l:param}=${v}`);
+  } else if(grp===0x52){     // Voice Performance: 52 pp vv dd
+    const param=d[5], voice=d[6];
+    const spec=VOICE_PERF.find(s=>s.p===param);
+    const v = spec && spec.type==='s' ? decS7(d[7]) : (spec && spec.type==='ch' ? d[7]+1 : d[7]);
+    if(voice===curVoice){ const ew=perfWidgets.find(x=>x.spec.p===param); if(ew) ew.w.set(v); }
+    lcdPerf(param, voice, v);
+    if($('logParam').checked) log(`RX Perf v${voice}.${spec?spec.l:param}=${v}`);
+  } else if(grp===0x53){     // System Setup: 53 pp dd [dd]
+    const param=d[5];
+    const spec=SYS_SETUP.find(s=>s.p===param);
+    let v;
+    if(spec && spec.type==='tempo') v=d[6]*100+d[7];
+    else if(spec && spec.type==='ch') v=d[6]+1;
+    else if(spec && spec.type==='dev') v=(d[6]===127?0:d[6]+1);
+    else v=d[6];
+    const ew=sysWidgets.find(x=>x.spec.p===param); if(ew) ew.w.set(v);
+    lcdSys(param, v);
+    if($('logParam').checked) log(`RX Sys.${spec?spec.l:param}=${v}`);
+  } else if(grp===0x50){     // Remote Switch (Group 80): 50 pp dd
+    lcdRemote(d[5]);
+    if($('logParam').checked) log(`RX Remote #${d[5]} ${REMOTE_NAMES[d[5]]||''} ${d[6]?'ON':'OFF'}`);
+  } else {
+    log(`RX PARAM (${d.length}B): ${hexs(d)}`);
   }
 }
 
@@ -434,11 +501,11 @@ function parseSetupNotes(d){
   // 妥当性チェック: 全て 0..127 に収まっていれば採用
   if(arr.every(v => v <= 127)){
     noteAssign = arr;
-    log(`Setup: Note#抽出成功 — 先頭12個 [${arr.slice(0,12).join(',')}]`);
+    log(`Setup: Note#Successful extraction—Head12: [${arr.slice(0,12).join(',')}]`);
     log(`  voice80-99: [${arr.slice(80,100).join(',')}]`);
     renderVoices();
   } else {
-    log(`Setup: Note#抽出 値が範囲外 (ニブル順を要確認) — 先頭 [${arr.slice(0,12).join(',')}]`);
+    log(`Setup: Note#extraction Value is out of range (ニブル順要確認) —Head [${arr.slice(0,12).join(',')}]`);
   }
 }
 
@@ -528,6 +595,85 @@ function encTempo(bpm){
   // 1st byte 0~2 (100's place: 100→1, 200→2), 2nd byte 0~99
   return [Math.floor(bpm/100) & 0x7F, bpm%100];
 }
+// param-change pitch decode (inverse encPitch): 0n000bbb / 0ppppppp
+function decParamPitch(hi, lo){
+  const sign = (hi & 0x40) ? -1 : 1;
+  return sign * ((hi & 0x07) * 1200 + lo * 10);
+}
+
+// === LCD1602 emulation =====================================================
+const LFO_HZ = [2.4,5.6,6.0,6.4,6.9,9.8,48.8,78.1];
+const pad2 = n => String(n).padStart(2,'0');
+const sgn  = v => (v>=0?'+':'')+v;
+function setLCD(l1, l2){
+  $('lcd0').textContent = (l1+'                ').slice(0,16);
+  $('lcd1').textContent = (l2+'                ').slice(0,16);
+}
+function lcdVoiceTop(voice){ return `Voice:${pad2(voice)}-${VOICES[voice]||''}`; }
+function veLine2(p, v){
+  switch(p){
+    case 0:  return `Pitch =${v}c`;
+    case 1:  return `Decay Rate=${v}`;
+    case 2:  return `Bend Rate =${v}`;
+    case 3:  return `Bend Range=${sgn(v)}`;
+    case 4:  return `VoiceLevel=${v}`;
+    case 5:  return `Pan =${v}`;
+    case 6:  return `LFO freq.=${LFO_HZ[v]}`;
+    case 7:  return `LFO PMD =${v}`;
+    case 8:  return `LFO AMD =${v}`;
+    case 9:  return `Poly Num =${v}`;
+    case 10: return `Simul Num =${v}`;
+    case 11: return `Delay time=${v}`;
+    case 12: return `2nd pitch=${sgn(v)}`;
+    case 13: return `2nd level=${sgn(v)}`;
+    case 14: return `2nd pan =${sgn(v)}`;
+    case 15: return `3rd pitch=${sgn(v)}`;
+    case 16: return `3rd level=${sgn(v)}`;
+    case 17: return `3rd pan =${sgn(v)}`;
+    case 18: return `4th pitch=${sgn(v)}`;
+    case 19: return `4th level=${sgn(v)}`;
+    case 20: return `4th pan =${sgn(v)}`;
+    default: return '';
+  }
+}
+function lcdVoiceEdit(p, voice, v){ setLCD(lcdVoiceTop(voice), veLine2(p, v)); }
+function lcdVoiceSelect(voice){
+  const n = (noteAssign && noteAssign[voice]!=null) ? noteAssign[voice] : NOTE_NUMBERS[voice];
+  setLCD(lcdVoiceTop(voice), `Note# =${n!=null?n:'--'}`);
+}
+function lcdPerf(p, voice, v){
+  let l2;
+  switch(p){
+    case 0: l2=`Transmit Ch=${v}`; break;
+    case 1: l2=`Note# =${v}`; break;
+    case 2: l2=`P.BendRng =${v}`; break;
+    case 3: l2=`Accent1 =${sgn(v)}`; break;
+    case 4: l2=`Accent2 =${sgn(v)}`; break;
+    default: l2='';
+  }
+  setLCD(lcdVoiceTop(voice), l2);
+}
+function lcdSys(p, v){
+  let l2;
+  switch(p){
+    case 0:  l2=`Quantize=${QUANT_OPTS[v]}`; break;
+    case 1:  l2=`Swing =${v}`; break;
+    case 2:  l2=`Click =${QUANT_OPTS[v]}`; break;
+    case 3:  l2=`Click =${v?'on':'off'}`; break;
+    case 4:  l2=`SongRepeat=${v?'on':'off'}`; break;
+    case 5:  l2=`Clock=${v?'MIDI':'Internal'}`; break;
+    case 6:  l2=`Foot Sw =${v}`; break;
+    case 7:  l2=`Ch Msg =${v?'on':'off'}`; break;
+    case 8:  l2=`Rx Ch =${v}`; break;
+    case 25: l2=`Effect =${v?'on':'off'}`; break;
+    case 26: l2=`Damp =${v?'on':'off'}`; break;
+    case 27: l2=`Tempo =${v}`; break;
+    case 28: l2=`Device# =${v===0?'off':v}`; break;
+    default: l2='';
+  }
+  setLCD('System Setup', l2);
+}
+function lcdRemote(p){ setLCD('Remote Switch', '>'+(REMOTE_NAMES[p]||('#'+p))); }
 
 // === Knob widget (compact) ===
 function arcPath(cx,cy,r,a1,a2){
@@ -602,13 +748,14 @@ function makeKnob(spec, onChange){
 function renderVoiceEdit(){
   const ed = $('voiceEd'); ed.innerHTML=''; voiceWidgets = [];
   const box=document.createElement('div'); box.className='grp';
-  const h=document.createElement('h3'); h.textContent='Voice Edit (Group 81)'; box.appendChild(h);
+  const h=document.createElement('h3'); h.textContent='Voice Edit'; box.appendChild(h);
   const kw=document.createElement('div'); kw.className='knobs'; box.appendChild(kw);
   for(const s of VOICE_EDIT){
     const w = makeKnob(s, v=>{
       if(s.type==='pitch') sendVoiceEdit(s.p, curVoice, ...encPitch(v));
       else if(s.type==='s') sendVoiceEdit(s.p, curVoice, encS7(v));
       else sendVoiceEdit(s.p, curVoice, v);
+      lcdVoiceEdit(s.p, curVoice, v);
     });
     kw.appendChild(w.el);
     voiceWidgets.push({spec:s, w});
@@ -637,12 +784,13 @@ function makeNumberWidget(spec, onChange){
 function renderPerfEdit(){
   const ed = $('perfEd'); ed.innerHTML=''; perfWidgets=[];
   const box=document.createElement('div'); box.className='grp';
-  const h=document.createElement('h3'); h.textContent='Voice Performance (Group 82)'; box.appendChild(h);
+  const h=document.createElement('h3'); h.textContent='Voice Performance'; box.appendChild(h);
   const kw=document.createElement('div'); box.appendChild(kw);
   for(const s of VOICE_PERF){
     const w = makeNumberWidget(s, v=>{
       const data = s.type==='s' ? encS7(v) : (s.type==='ch' ? v-1 : v);
       sendPerf(s.p, curVoice, data);
+      lcdPerf(s.p, curVoice, v);
     });
     kw.appendChild(w.el); perfWidgets.push({spec:s, w});
   }
@@ -651,7 +799,7 @@ function renderPerfEdit(){
 function renderSysEdit(){
   const ed = $('sysEd'); ed.innerHTML=''; sysWidgets=[];
   const box=document.createElement('div'); box.className='grp';
-  const h=document.createElement('h3'); h.textContent='System Setup (Group 83)'; box.appendChild(h);
+  const h=document.createElement('h3'); h.textContent='System Setup'; box.appendChild(h);
   const kw=document.createElement('div'); box.appendChild(kw);
   for(const s of SYS_SETUP){
     const w = makeNumberWidget(s, v=>{
@@ -659,6 +807,7 @@ function renderSysEdit(){
       else if(s.type==='ch') sendSys(s.p, v-1);
       else if(s.type==='dev') sendSys(s.p, v===0 ? 127 : v-1);  // off=127, 1-16→0-15
       else sendSys(s.p, v);
+      lcdSys(s.p, v);
     });
     kw.appendChild(w.el); sysWidgets.push({spec:s, w});
   }
@@ -676,6 +825,7 @@ function renderRemote(){
       if(e.shiftKey){ sendRemote(i,true); }
       else if(e.ctrlKey){ sendRemote(i,false); }
       else { sendRemote(i,true); setTimeout(()=>sendRemote(i,false), 60); }
+      lcdRemote(i);
     };
     g.appendChild(b);
   });
@@ -693,11 +843,12 @@ function renderVoices(){
     d.onclick = ()=>{ curVoice=i; renderVoices(); updateVoiceName();
       const nn = (noteAssign && noteAssign[i]!=null) ? noteAssign[i] : NOTE_NUMBERS[i];
       if(nn!=null) $('testNote').value = nn;
+      lcdVoiceSelect(i);
       reqVoiceDebounced(i); };  // 選択ごとに本体から現在値を取得→エディタ反映（デバウンス付）
     g.appendChild(d);
   });
 }
-function updateVoiceName(){ $('voiceName').textContent = `編集対象 Voice: ${String(curVoice).padStart(2,'0')} ${VOICES[curVoice]}`; }
+function updateVoiceName(){ $('voiceName').textContent = `Editing target Voice: ${String(curVoice).padStart(2,'0')} ${VOICES[curVoice]}`; }
 
 // === File save / load ===
 function download(bytes, name){
@@ -706,7 +857,7 @@ function download(bytes, name){
   setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
 }
 $('saveAll').onclick = ()=>{
-  if(!receivedSyx.length){ log('受信データなし'); return; }
+  if(!receivedSyx.length){ log('No Received Data'); return; }
   const total = receivedSyx.reduce((s,a)=>s+a.length,0);
   const out = new Uint8Array(total); let o=0;
   for(const m of receivedSyx){ out.set(m,o); o+=m.length; }
@@ -751,14 +902,13 @@ function nOn(){ if(!output) return; const n=parseInt($('testNote').value,10), v=
 function nOff(){ if(!output) return; const n=parseInt($('testNote').value,10); output.send([0x80, n&0x7F, 0]); }
 $('noteOn').onclick = nOn;
 $('noteOff').onclick = nOff;
-$('midiStart').onclick = ()=> output && output.send([0xFA]);
-$('midiStop').onclick = ()=> output && output.send([0xFC]);
 
 $('clearLog').onclick = ()=> $('log').innerHTML='';
 
 // init
 renderVoices(); updateVoiceName();
 renderVoiceEdit(); renderPerfEdit(); renderSysEdit(); renderRemote();
+setLCD(' YAMAHA  RX7', '  Web Editor');
 initMIDI();
 </script>
 </body>

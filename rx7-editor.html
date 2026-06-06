@@ -68,6 +68,32 @@
            border-radius:2px; color:#666; cursor:default; }
   .pcell.held { background:#1e3a1e; color:#cfe; border-color:#3a6a3a; cursor:pointer; }
   .pcell.held:hover { background:#2a5a2a; }
+  /* Instrument pads (24 keys A-X) */
+  #instPads { display:grid; grid-template-columns:repeat(12,1fr); gap:2px; max-width:680px; margin:4px 0; }
+  .ipad { background:#2a2a30; border:1px solid #444; padding:3px 2px; text-align:center;
+          font-size:10px; cursor:pointer; border-radius:3px; user-select:none; min-height:28px;
+          line-height:1.15; }
+  .ipad .ipl { font-weight:700; color:#fff; }
+  .ipad .ipv { font-size:8px; color:#9bd; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .ipad:hover { background:#3a3a45; border-color:#6af; }
+  .ipad.sel { background:#1f3050; border-color:#6af; box-shadow:0 0 0 1px #6af inset; }
+  /* Mini piano keyboard */
+  .kbd { background:#15151a; padding:6px; border-radius:4px; user-select:none; width:fit-content; }
+  .kbd-wrap { position:relative; display:flex; gap:0; height:62px; }
+  .wk { width:18px; height:62px; background:#f0f0f0; border:1px solid #555; border-top:none;
+        border-radius:0 0 2px 2px; cursor:pointer; box-sizing:border-box; position:relative; }
+  .wk:hover { background:#cce; }
+  .wk.has { background:#e85a5a; }
+  .wk.sel { background:#6af; }
+  .wk.has.sel { background:#6af; box-shadow:0 0 0 2px #e85a5a inset; }
+  .bk { width:12px; height:38px; background:#222; border:1px solid #000; border-top:none;
+        border-radius:0 0 2px 2px; cursor:pointer; box-sizing:border-box; position:absolute; top:0; z-index:2; }
+  .bk:hover { background:#36f; }
+  .bk.has { background:#a83232; }
+  .bk.sel { background:#6af; }
+  .bk.has.sel { background:#6af; box-shadow:0 0 0 2px #e85a5a inset; }
+  .wkLbl { position:absolute; bottom:1px; left:50%; transform:translateX(-50%); font-size:7px;
+           color:#333; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -76,7 +102,6 @@
 <div class="row">
   <label>Input: <select id="inSel"></select></label>
   <label>Output: <select id="outSel"></select></label>
-  <label>RX7 Device#: <input id="dev" type="number" min="1" max="16" value="1"></label>
 </div>
 
 <div id="lcdWrap" title="RX7 Parameter Change LCD">
@@ -97,11 +122,12 @@
   <div id="log"></div>
 </details>
 
-<h2>Receive / Save / Load / Send</h2>
-<div style="font-size:11px; color:#c80; border:1px solid #553; background:#2a2410; border-radius:4px; padding:5px 8px; margin:4px 0;">
-  ⚠ Factory reset: power on while holding <b>-1/NO + +1/YES + STOP/CONTINUE + START</b> on the RX7 (erases all data).
-</div>
-<div id="ioSection" style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin:8px 0;">
+<details class="sec" open>
+  <summary>Receive / Save / Load / Send</summary>
+  <div style="font-size:11px; color:#c80; border:1px solid #553; background:#2a2410; border-radius:4px; padding:5px 8px; margin:4px 0;">
+    ⚠ Factory reset: power on while holding <b>-1/NO + +1/YES + STOP/CONTINUE + START</b> on the RX7 (erases all data).
+  </div>
+  <div id="ioSection" style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin:8px 0;">
   <fieldset style="border:1px solid #5a6a8a; border-radius:5px; padding:6px 10px;">
     <legend style="font-size:11px; color:#9bd; padding:0 4px;">Load .syx file → Send to RX7</legend>
     <div class="row">
@@ -121,7 +147,24 @@
       <button id="rqSet">Request Setup from RX7</button>
     </div>
   </fieldset>
-</div>
+  <fieldset style="border:1px solid #5a6a8a; border-radius:5px; padding:6px 10px;">
+    <legend style="font-size:11px; color:#9bd; padding:0 4px;">Memory Protect (required for all writes)</legend>
+    <div class="row">
+      <button id="memProtOff" title="UTILITY JOB03 → OFF: allow SysEx writes / edits">OFF (allow writes)</button>
+      <button id="memProtOn"  title="UTILITY JOB03 → ON: protect memory from accidental changes">ON</button>
+    </div>
+  </fieldset>
+  <fieldset style="border:1px solid #5a6a8a; border-radius:5px; padding:6px 10px;">
+    <legend style="font-size:11px; color:#9bd; padding:0 4px;">RX7 Device# (must match unit value)</legend>
+    <div class="row">
+      <label>Value: <input id="dev" type="number" min="1" max="16" value="1" style="width:50px"></label>
+    </div>
+    <div style="font-size:10px; color:#888; margin-top:2px;">
+      Set device# on RX7 manually: MIDI → JOB 07 → +1/YES (default = off). Then enter the same number here.
+    </div>
+  </fieldset>
+  </div>
+</details>
 
 <details class="sec" open>
   <summary>Voice (Select / Test / Edit / Performance)</summary>
@@ -140,11 +183,88 @@
   <h2>Voice Edit</h2>
   <div class="row">
     <span id="voiceName">Voice: -</span>
+    <button id="voiceStore" style="font-size:11px;padding:3px 7px" title="JOB07: Store edited Voice to internal memory (Remote Switch sequence)">Voice Store</button>
+    <button id="voiceInit" style="font-size:11px;padding:3px 7px" title="JOB08: Initialize selected Voice (Remote Switch sequence)">Voice Init</button>
+    <button id="editRecall" style="font-size:11px;padding:3px 7px" title="JOB09: Recall last edited Voice (Remote Switch sequence)">Edit Recall</button>
   </div>
   <div id="voiceEd"></div>
 
   <h2>Voice Performance (TX ch / Note# / Bend / Accent)</h2>
   <div id="perfEd"></div>
+</details>
+
+<details class="sec">
+  <summary>Key Assign / Multi-timbre Setup</summary>
+  <div style="font-size:11px; color:#9bd; margin:4px 0;">
+    1) Select a voice in <b>Voices (100)</b> &nbsp; 2) Click a pad below to pick the target key &nbsp; 3) Press <b>Assign</b>
+  </div>
+  <div id="instPads"></div>
+  <div class="row" style="font-size:11px; margin-top:6px; align-items:center;">
+    <span id="kaTarget" style="color:#9bd;">Target Key: A</span>
+    <button id="kaAssign" style="background:#4f985a;color:#fff;">Assign Voice → Key (JOB01)</button>
+    <button id="kaPlay">Play Key</button>
+  </div>
+  <fieldset style="border:1px solid #5a6a8a; border-radius:5px; padding:4px 10px 6px; margin:8px 0 6px;">
+    <legend style="font-size:11px; color:#9bd; padding:0 4px;">Multi Voice / Multi Step (JOB03 / JOB04)</legend>
+    <div class="row" style="font-size:11px;">
+      <span style="color:#9bd;">Multi Voice:</span>
+      <button id="kaMultiVoice" title="JOB03: assign current voice to upper row A-L">Apply (curVoice → A-L)</button>
+      <button id="kaMultiCancel" title="JOB03: cancel Multi Voice (press No when prompted)">Cancel (No)</button>
+    </div>
+    <div class="row" style="font-size:11px; margin-top:6px; gap:8px;">
+      <span style="color:#9bd;">Multi Step:</span>
+      <label>Pitch <input id="msPitch" type="number" min="-200" max="200" step="10" value="0" style="width:60px"></label>
+      <button id="msApply1" title="JOB04 key 1: PITCH offset for upper-row keys">Apply</button>
+      <label>Level <input id="msLevel" type="number" min="-10" max="10" value="0" style="width:50px"></label>
+      <button id="msApply2" title="JOB04 key 2: LEVEL offset">Apply</button>
+      <label>Pan <input id="msPan" type="number" min="-5" max="5" value="0" style="width:50px"></label>
+      <button id="msApply3" title="JOB04 key 3: PAN offset">Apply</button>
+      <label>Decay <input id="msDecay" type="number" min="-10" max="10" value="0" style="width:50px"></label>
+      <button id="msApply4" title="JOB04 key 4: DECAY offset">Apply</button>
+    </div>
+    <div style="font-size:10px; color:#888; margin-top:2px;">
+      Note: Apply takes a few seconds (sets absolute value via NO×N then YES×N). Ranges: Pitch ±200 / Level・Decay ±10 / Pan ±5.
+    </div>
+  </fieldset>
+  <fieldset style="border:1px solid #5a6a8a; border-radius:5px; padding:4px 10px 6px; margin:8px 0 6px;">
+    <legend style="font-size:11px; color:#9bd; padding:0 4px;">Note# Assign (MIDI JOB04, via Setup bulk modify)</legend>
+    <div class="row" style="font-size:11px; align-items:center;">
+      <button id="kbDown" title="Transpose down 1 octave">▼ Oct</button>
+      <span id="kbRange" style="font-family:ui-monospace,monospace; color:#9bd;">C2-C4</span>
+      <button id="kbUp" title="Transpose up 1 octave">▲ Oct</button>
+      <span id="naTarget" style="color:#9bd; margin-left:8px;"></span>
+    </div>
+    <div id="kbd" class="kbd"></div>
+    <div class="row" style="font-size:11px; margin-top:4px;">
+      <button id="naAssign" style="background:#4f985a;color:#fff;" title="Modify cached Setup bulk and send back to RX7">Assign Voice Note → RX7</button>
+      <button id="naRefresh" title="Re-request Setup from RX7 (do this before Assign if RX7 state changed)">Refresh Setup</button>
+      <span style="font-size:10px; color:#888;">Requires recent Setup dump. Sends modified Setup bulk back; preserves other Setup settings.</span>
+    </div>
+  </fieldset>
+  <div class="row" style="font-size:11px; margin-top:8px;">
+    <label>Key Data Slot:
+      <select id="kaSlot" style="font-size:11px;">
+        <option value="0">0 (user)</option><option value="1">1 (user)</option><option value="2">2 (user)</option><option value="3">3 (user)</option><option value="4">4 (user)</option>
+        <option value="5">5 (factory)</option><option value="6">6 (factory)</option><option value="7">7 (factory)</option><option value="8">8 (factory)</option><option value="9">9 (factory)</option>
+      </select>
+    </label>
+    <button id="kaSave" title="JOB07 Key Data Save (slots 0-4 only)">Save (JOB07)</button>
+    <button id="kaLoad" title="JOB08 Key Data Load (0-4=user, 5-9=factory preset)">Load (JOB08)</button>
+    <button id="enterKeyAssign" title="Open Key Assign mode on RX7">Open Key Assign</button>
+  </div>
+  <div class="row" style="font-size:11px; margin-top:6px;">
+    <span style="color:#9bd; font-weight:bold;">MIDI:</span>
+    <button id="midiChOn" title="MIDI JOB01 Channel Message ON">Ch Msg ON</button>
+    <button id="midiChOff" title="MIDI JOB01 Channel Message OFF">Ch Msg OFF</button>
+    <button id="noteInit" title="MIDI JOB05 Note Initialize">Note Initialize (JOB05)</button>
+    <button id="enterMIDI" title="Open MIDI mode on RX7">Open MIDI mode</button>
+    <button id="kaRefresh" title="Request Setup to refresh pad assignments">Refresh from RX7</button>
+  </div>
+  <div style="font-size:10px; color:#888; margin-top:4px;">
+    For per-channel Receive Ch (MIDI JOB02), Note# Assign (JOB04) and per-voice Pitch Bend Range (JOB06),
+    use <em>Open MIDI mode</em> then edit on RX7 directly — they are large per-channel/per-voice tables.
+    Voice-level Transmit Ch / Pitch Bend / Accent are also available in <b>Voice Performance</b>.
+  </div>
 </details>
 
 <details class="sec">
@@ -203,11 +323,11 @@ const VOICES = [
  'RvsBD','RvsSD','RvsEdge','RvsCrsh','RvsTom','RvsETom'
 ];
 
-// === Factory default note numbers (音色一覧表 初期値ノートNo. p.111) ===
-// MIDIノート再アサイン(MIDI JOB#04)していれば実機と異なる場合あり
+// === Factory default note numbers (Voice list, manual p.111) ===
+// May differ from real unit if MIDI Note# Assign (MIDI JOB#04) was changed
 const NOTE_NUMBERS = [
-  45,44,39,38,37,36,35,34,33,      // 00-08 BD系
-  52,49,50,31,30,29,28,27,26,25,   // 09-18 SD系 (11はSD3,推定)
+  45,44,39,38,37,36,35,34,33,      // 00-08 BD group
+  52,49,50,31,30,29,28,27,26,25,   // 09-18 SD group (11=SD3 estimated)
   51,46,                           // 19-20 Rim
   53,50,48,47,                     // 21-24 Tom
   24,23,22,21,20,19,18,17,16,      // 25-33 F.Tom/H.Tom/P.Tom
@@ -218,11 +338,11 @@ const NOTE_NUMBERS = [
   13,                              // 49 EbassH
   12,11,10,9,8,7,6,5,4,3,2,        // 50-60 Ebass〜Brass
   54,76,55,58,56,                  // 61-65 Claps/Timpani/Cowbell/Tambrn/Shaker
-  66,65,64,68,67,                  // 66-70 Conga/Bongo (一部推定)
+  66,65,64,68,67,                  // 66-70 Conga/Bongo (some estimated)
   70,69,75,74,                     // 71-74 Timbl/Agogo
   77,78,79,73,80,81,82,83,84,85,86,87,88, // 75-87
   89,90,91,92,93,94,               // 88-93
-  95,96,97,98,99,100               // 94-99 Reverse系
+  95,96,97,98,99,100               // 94-99 Reverse group
 ];
 
 // === Parameter specs ===
@@ -253,7 +373,7 @@ const VOICE_EDIT = [
 
 // Voice Performance— per voice
 const VOICE_PERF = [
-  {p:0, l:'TX Ch',     type:'ch', min:1,  max:16},   // 表示1-16, 送信時 -1 (data 0-15)
+  {p:0, l:'TX Ch',     type:'ch', min:1,  max:16},   // display 1-16, send -1 (data 0-15)
   {p:1, l:'Note#',     type:'u', min:0,  max:127},
   {p:2, l:'BendRange', type:'u', min:0,  max:12},
   {p:3, l:'Accent 1',  type:'s', min:-63,max:63},
@@ -271,7 +391,7 @@ const SYS_SETUP = [
   {p:5, l:'Sync',      type:'enum', opts:['Internal','MIDI']},
   {p:6, l:'FootSw',    type:'u', min:1, max:60},
   {p:7, l:'Ch Msg',    type:'u', min:0, max:1},
-  {p:8, l:'RxCh Voice',type:'ch', min:1, max:16},  // 表示1-16, 送信 -1
+  {p:8, l:'RxCh Voice',type:'ch', min:1, max:16},  // display 1-16, send -1
   // 9-24 Rec Ch in Pitch Mode 1-16ch (skip in basic UI)
   {p:25,l:'Effect',    type:'u', min:0, max:1},
   {p:26,l:'Damp',      type:'u', min:0, max:1},
@@ -281,7 +401,7 @@ const SYS_SETUP = [
 
 // Remote Switch (Group 80) — 0..60
 const REMOTE_NAMES = [
- 'POWER(restart)','Accent1','Accent2','Pattern/Song','RealTime Write','Step Write/Insert','Voice Edit','Key Assign',
+ 'POWER(restart)','Accent1 / Y','Accent2 / Z / ◁▷','Pattern/Song','RealTime Write','Step Write/Insert','Voice Edit','Key Assign',
  '7 1/32','8 1/48','9 off','Quantize/Delete','Swing/Repeat','Click/TempoChg','Chain','Cassette/Cartridge',
  '4 1/12','5 1/16','6 1/24','PtnEdit/VolChg','Clear','Copy','Sync','MIDI',
  '1 1/4','2 1/6','3 1/8','Effect','Damp','Tempo','Utility','Job',
@@ -391,7 +511,7 @@ function handleSysex(d){
   const sub = d[2] & 0xF0;
   const ch  = d[2] & 0x0F;
   if($('logSysex').checked) log(`RX SysEx sub=${hex(sub)} dev=${ch} len=${d.length}`);
-  if(sub===0x00) receivedSyx.push(d);  // バルクダンプのみ保存対象（Param echoは除外）
+  if(sub===0x00) receivedSyx.push(d);  // only bulk dumps stored (exclude param echo)
 
   if(sub===0x00){
     // bulk dump (format byte at d[3])
@@ -413,7 +533,13 @@ function handleSysex(d){
       parseVoiceBulkToEditor(d);
     } else if(hdr.startsWith('LM  8515SY')){
       lastSetup = d;
-      log('Setup data Received');
+      log(`Setup data Received (${d.length}B)`);
+      // Verify checksum algorithm against RX7's value
+      const actualCS = d[d.length-2];
+      const sumA = (()=>{let s=0; for(let i=4;i<=d.length-3;i++) s+=d[i]; return (0x80-(s&0x7F))&0x7F;})();
+      const sumB = (()=>{let s=0; for(let i=6;i<=d.length-3;i++) s+=d[i]; return (0x80-(s&0x7F))&0x7F;})();
+      const sumC = (()=>{let s=0; for(let i=16;i<=d.length-3;i++) s+=d[i]; return (0x80-(s&0x7F))&0x7F;})();
+      log(`  checksum check: actual=0x${hex(actualCS)} algoA(BC..)=0x${hex(sumA)} algoB(hdr..)=0x${hex(sumB)} algoC(DATA..)=0x${hex(sumC)}`);
       parseSetupNotes(d);
     } else if(hdr.startsWith('LM  8515')){
       lastSV = d;
@@ -428,7 +554,7 @@ function handleSysex(d){
   }
 }
 
-// 受信 Parameter Change を解釈
+// Parse incoming Parameter Change
 function handleParamChange(d){
   const grp = d[4];
   if(grp===0x51){            // Voice Edit: 51 vv pp dd [dd]
@@ -494,13 +620,13 @@ function sendSys(param, ...data){
 }
 
 // === Setup bulk parser (Note# of each Voice) ===
-// Setup DATA はニブルエンコード: 1論理バイト = 上位ニブル + 下位ニブル の2 MIDIバイト
-// 論理レイアウト(付表 System Setup Bulk data):
+// Setup DATA is nibble-encoded: 1 logical byte = high nibble + low nibble (2 MIDI bytes)
+// Logical layout (System Setup Bulk data):
 //   0:Quantize 1:Swing 2:Click 3:ClickOn 4:SongRpt 5:Sync 6:FootSw 7:ChMsg
-//   8:RecCh(Voice) 9:RecCh(Pitch,2byte)  → ここまで論理11バイト
-//   10:Note# of each Voice (100byte) ← 論理オフセット11から
-let noteAssign = null;  // 実機から取得した100音色のノート番号
-// DATAは各ニブルをASCIIヘキサ文字に変換: 0-9→'0'-'9'(0x30-39), 10-15→'A'-'F'(0x41-46)
+//   8:RecCh(Voice) 9:RecCh(Pitch,2byte)  -> 11 logical bytes total
+//   10:Note# of each Voice (100byte) <- starts at logical offset 11
+let noteAssign = null;  // 100 voice note numbers fetched from the unit
+// Each nibble is ASCII hex: 0-9 -> '0'-'9'(0x30-39), 10-15 -> 'A'-'F'(0x41-46)
 function hexNibble(b){
   if(b >= 0x30 && b <= 0x39) return b - 0x30;
   if(b >= 0x41 && b <= 0x46) return b - 0x41 + 10;
@@ -518,16 +644,27 @@ function unpackNibbles(d, start, count){
 }
 function parseSetupNotes(d){
   const dataStart = 16;          // F0,43,sub,0B,bcMSB,bcLSB + "LM  8515SY"(10) = 16
-  const noteLogicalOffset = 11;  // param 0-9 = 論理11バイト
+  const noteLogicalOffset = 11;  // param 0-9 = 11 logical bytes
   const arr = unpackNibbles(d, dataStart + 2*noteLogicalOffset, 100);
-  // 妥当性チェック: 全て 0..127 に収まっていれば採用
+  // Validity check: accept if all values within 0..127
   if(arr.every(v => v <= 127)){
     noteAssign = arr;
     log(`Setup: Note#Successful extraction—Head12: [${arr.slice(0,12).join(',')}]`);
     log(`  voice80-99: [${arr.slice(80,100).join(',')}]`);
     renderVoices();
+    if(typeof renderKbd==='function') renderKbd();
   } else {
-    log(`Setup: Note#extraction Value is out of range (ニブル順要確認) —Head [${arr.slice(0,12).join(',')}]`);
+    log(`Setup: Note# extraction out of range (check nibble order) — Head [${arr.slice(0,12).join(',')}]`);
+  }
+  // Key data: from logical offset 528 (= 11+100+100+16+100+100+100+1), 6×24=144 bytes
+  // First byte of each 6-byte key block assumed to be Voice number
+  const keyData = unpackNibbles(d, dataStart + 2*528, 144);
+  const ka = [];
+  for(let i=0;i<24;i++) ka.push(keyData[i*6]);
+  if(ka.every(v => v <= 99)){
+    keyVoiceAssign = ka;
+    log(`Setup: Key Assign (A-X): [${ka.map(pad2).join(',')}]`);
+    renderInstPads();
   }
 }
 
@@ -784,7 +921,7 @@ function renderVoiceEdit(){
   }
   ed.appendChild(box);
 }
-// 数値入力ボックス型ウィジェット（増減ボタン付き）
+// Number-input widget (spinner)
 function makeNumberWidget(spec, onChange){
   const wrap = document.createElement('div'); wrap.className='numw';
   const lbl = document.createElement('label'); lbl.textContent = spec.l + ': ';
@@ -843,6 +980,7 @@ function renderRemote(){
     if(i===36){ b.style.background='#f89a9a'; b.style.color='#222'; }      // Start
     else if(i===35){ b.style.background='#4883bb'; b.style.color='#fff'; } // Stop/Continue
     else if(i===6){ b.style.background='#4f985a'; b.style.color='#fff'; }  // Voice Edit
+    else if(i===23 || i===30 || i===31){ b.style.background='#e0a020'; b.style.color='#222'; }  // MIDI / UTILITY / JOB
     b.onclick = e=>{
       if(e.shiftKey){ sendRemote(i,true); }
       else if(e.ctrlKey){ sendRemote(i,false); }
@@ -855,18 +993,19 @@ function renderRemote(){
 let reqVoiceTimer = 0;
 function reqVoiceDebounced(no){
   clearTimeout(reqVoiceTimer);
-  reqVoiceTimer = setTimeout(()=> reqVoice(no), 180);  // 連打吸収
+  reqVoiceTimer = setTimeout(()=> reqVoice(no), 180);  // debounce rapid clicks
 }
 function renderVoices(){
   const g=$('voices'); g.innerHTML='';
   VOICES.forEach((n,i)=>{
     const d=document.createElement('div'); d.className='voice'; if(i===curVoice) d.classList.add('cur');
     d.textContent = String(i).padStart(2,'0')+' '+n;
-    d.onclick = ()=>{ curVoice=i; renderVoices(); updateVoiceName();
+    d.onclick = ()=>{ curVoice=i; renderVoices(); updateVoiceName(); updateKaTarget();
       const nn = (noteAssign && noteAssign[i]!=null) ? noteAssign[i] : NOTE_NUMBERS[i];
       if(nn!=null) $('testNote').value = nn;
+      setKbSelectedFromCurVoice(); updateNaTarget();
       lcdVoiceSelect(i);
-      reqVoiceDebounced(i); };  // 選択ごとに本体から現在値を取得→エディタ反映（デバウンス付）
+      reqVoiceDebounced(i); };  // fetch current values on each selection (debounced)
     g.appendChild(d);
   });
 }
@@ -912,11 +1051,11 @@ $('file').onchange = async ev=>{
     }
     log(`Loaded ${f.name}: ${msgs.length} sysex`);
   }
-  $('loadedInfo').textContent=` 計 ${loadedSyx.length} SysEx`;
+  $('loadedInfo').textContent=` total ${loadedSyx.length} SysEx`;
 };
 $('sendAll').onclick = async ()=>{
   for(const m of loadedSyx){ send(m); await new Promise(r=>setTimeout(r,150)); }
-  log('Send loaded 完了');
+  log('Send loaded done');
 };
 
 // === Pattern dump (load / save) ===
@@ -970,6 +1109,269 @@ $('patSend').onclick = async ()=>{
 };
 $('patClear').onclick = ()=>{ patterns.fill(null); renderPatGrid(); log('Pattern buffer cleared'); };
 
+// === Voice Init / Edit Recall (RX7 JOBs via Remote Switch sequence) ===
+// Remote Switch index: 6=VoiceEdit 31=Job 34=+1Yes / numeric key idx:
+const NUMKEY = [33,24,25,26,16,17,18,8,9,10];  // 0-9
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function remoteSeq(seq, gap=130, hold=45){
+  for(const i of seq){ sendRemote(i,true); await sleep(hold); sendRemote(i,false); await sleep(gap); }
+}
+$('voiceStore').onclick = async ()=>{
+  log('Voice Store (JOB07)');
+  // EditVoice→Job07→+1Yes(Store?)→+1Yes(sure?)
+  await remoteSeq([6, 31,NUMKEY[0],NUMKEY[7], 34,34]);
+  log('Voice Store done');
+};
+$('voiceInit').onclick = async ()=>{
+  const v=curVoice;
+  log(`Voice Init (JOB08) → voice ${pad2(v)}`);
+  // EditVoice→Job01(VoiceSelect)→vv→Job08→+1Yes(Init?)→+1Yes(sure?)
+  await remoteSeq([6, 31,NUMKEY[0],NUMKEY[1], NUMKEY[(v/10)|0],NUMKEY[v%10], 31,NUMKEY[0],NUMKEY[8], 34,34]);
+  log('Voice Init done');
+};
+$('editRecall').onclick = async ()=>{
+  log('Edit Recall (JOB09)');
+  // EditVoice→Job09→+1Yes(Recall?)→+1Yes(sure?)
+  await remoteSeq([6, 31,NUMKEY[0],NUMKEY[9], 34,34]);
+  log('Edit Recall done');
+};
+
+// === Key Assign / Multi-timbre Section =====================================
+// Instrument key Remote Switch indices: A=37, B=38, ..., X=60
+const INST_KEYS = ['A','B','C','D','E','F','G','H','I','J','K','L',
+                   'M','N','O','P','Q','R','S','T','U','V','W','X'];
+let keyVoiceAssign = new Array(24).fill(null);  // Voice number assigned to each instrument key (0..23)
+let selectedPad = 0;                            // currently targeted instrument key
+
+function renderInstPads(){
+  const g=$('instPads'); if(!g) return;
+  g.innerHTML='';
+  INST_KEYS.forEach((k,i)=>{
+    const d=document.createElement('div'); d.className='ipad'+(i===selectedPad?' sel':'');
+    const v = keyVoiceAssign[i];
+    d.innerHTML = `<div class="ipl">${k}</div><div class="ipv">${v!=null?(pad2(v)+' '+(VOICES[v]||'')):'-'}</div>`;
+    d.title = `Click to target key ${k}`;
+    d.onclick = ()=>{ selectedPad=i; renderInstPads(); updateKaTarget(); };
+    g.appendChild(d);
+  });
+}
+function updateKaTarget(){
+  const el=$('kaTarget'); if(!el) return;
+  el.innerHTML = `Target Key: <b>${INST_KEYS[selectedPad]}</b> &nbsp;←&nbsp; Voice ${pad2(curVoice)} ${VOICES[curVoice]||''}`;
+}
+async function assignVoiceToKey(keyIdx, voice){
+  log(`Voice Assign (JOB01): key ${INST_KEYS[keyIdx]} ← voice ${pad2(voice)} ${VOICES[voice]||''}`);
+  // Damp(28) mutes instrument key sound -> assign -> toggle Damp back
+  // Assumes Damp starts OFF
+  sendRemote(28,true); await sleep(15); sendRemote(28,false);  // tap DAMP → ON
+  await sleep(30);
+  // KEY ASSIGN(7) → JOB(31) → 0 → 1 → instrumentKey(37+i) → numkey(tens) → numkey(ones)
+  await remoteSeq([7, 31, NUMKEY[0], NUMKEY[1], 37+keyIdx, NUMKEY[(voice/10)|0], NUMKEY[voice%10]], 60, 25);
+  await sleep(30);
+  sendRemote(28,true); await sleep(15); sendRemote(28,false);  // tap DAMP → OFF
+  keyVoiceAssign[keyIdx] = voice;
+  renderInstPads();
+}
+$('kaAssign').onclick = ()=> assignVoiceToKey(selectedPad, curVoice);
+$('kaPlay').onclick = ()=>{
+  if(!output){ log('Output not selected'); return; }
+  // If pad has assignment use that voice, otherwise use curVoice (play via MIDI note number)
+  const v = (keyVoiceAssign[selectedPad]!=null) ? keyVoiceAssign[selectedPad] : curVoice;
+  const note = (noteAssign && noteAssign[v]!=null) ? noteAssign[v] : NOTE_NUMBERS[v];
+  if(note==null){ log('Play: note number unknown'); return; }
+  const vel = parseInt($('testVel').value,10)||100;
+  output.send([0x90, note&0x7F, vel&0x7F]);
+  setTimeout(()=>output.send([0x80, note&0x7F, 0]), 200);
+  log(`Play: voice ${pad2(v)} ${VOICES[v]||''} note ${note} (key ${INST_KEYS[selectedPad]})`);
+};
+$('kaMultiVoice').onclick = async ()=>{
+  log(`Multi Voice (JOB03): curVoice ${pad2(curVoice)} → upper row A-L`);
+  // First assign curVoice to key A, then Multi Voice key-tap to spread to A-L
+  await assignVoiceToKey(0, curVoice);
+  await sleep(80);
+  await remoteSeq([7, 31, NUMKEY[0], NUMKEY[3], 37]);  // KeyAssign→JOB03→Key A
+  for(let i=0;i<12;i++) keyVoiceAssign[i] = curVoice;
+  renderInstPads();
+  log('Multi Voice done');
+};
+$('kaMultiCancel').onclick = async ()=>{
+  log('Multi Voice cancel (JOB03 → No)');
+  // KEY ASSIGN → JOB → 0 → 3 → -1/No
+  await remoteSeq([7, 31, NUMKEY[0], NUMKEY[3], 32], 60, 25);
+  log('Multi Voice cancelled');
+};
+
+// Multi Step: KEY ASSIGN → JOB 04 → param key (1-4) → reset to min via NO×N → ramp via YES×N → START
+// Pitch uses 10-cent fine mode (hold [0] + YES/NO for 10-cent step), others are 1-unit
+const MS_MAX = {1:200, 2:10, 3:5, 4:10};
+const MS_LABEL = {1:'PITCH', 2:'LEVEL', 3:'PAN', 4:'DECAY'};
+async function applyMultiStep(param, value){
+  const max = MS_MAX[param];
+  value = Math.max(-max, Math.min(max, value|0));
+  log(`Multi Step ${MS_LABEL[param]} = ${value} (takes a moment...)`);
+  // KEY ASSIGN → JOB → 0 → 4 → param key
+  await remoteSeq([7, 31, NUMKEY[0], NUMKEY[4], NUMKEY[param]], 50, 20);
+  await sleep(40);
+  const tick = async (key) => { sendRemote(key,true); await sleep(10); sendRemote(key,false); await sleep(22); };
+  if(param===1){
+    // PITCH: 10-cent fine mode (hold 0, press YES/NO)
+    const steps = Math.round(value/10);
+    const maxSteps = Math.round(max/10);  // 20
+    sendRemote(NUMKEY[0], true); await sleep(20);
+    for(let i=0;i<maxSteps;i++) await tick(32);              // reset NO×20 → -200
+    for(let i=0;i<steps+maxSteps;i++) await tick(34);        // YES×(steps+20) → target
+    sendRemote(NUMKEY[0], false); await sleep(30);
+  } else {
+    for(let i=0;i<max;i++) await tick(32);                   // reset NO×max
+    for(let i=0;i<value+max;i++) await tick(34);             // YES×(value+max)
+  }
+  await sleep(40);
+  sendRemote(36,true); await sleep(20); sendRemote(36,false); // START = Apply
+  log(`Multi Step ${MS_LABEL[param]} done`);
+}
+$('msApply1').onclick = ()=> applyMultiStep(1, parseInt($('msPitch').value,10)||0);
+$('msApply2').onclick = ()=> applyMultiStep(2, parseInt($('msLevel').value,10)||0);
+$('msApply3').onclick = ()=> applyMultiStep(3, parseInt($('msPan').value,10)||0);
+$('msApply4').onclick = ()=> applyMultiStep(4, parseInt($('msDecay').value,10)||0);
+
+// === Mini piano keyboard for Note# Assign (MIDI JOB04) ====================
+// Modify cached Setup bulk in place and re-send. Much faster than Remote Switch navigation.
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const isBlackKey = n => [1,3,6,8,10].includes(n%12);
+const noteName  = n => NOTE_NAMES[n%12] + (Math.floor(n/12)-1);
+const KB_WHITE  = 35;     // visible white keys (5 octaves)
+let kbBase     = 36;      // first MIDI note shown (C2)
+let kbSelected = 60;      // currently selected MIDI note (C4)
+
+function voicesAtNote(n){
+  if(!noteAssign) return [];
+  const out=[]; for(let v=0;v<100;v++) if(noteAssign[v]===n) out.push(v);
+  return out;
+}
+function keyTitle(n){
+  const vs = voicesAtNote(n);
+  const base = `${noteName(n)} MIDI ${n}`;
+  if(!vs.length) return base;
+  return base + ' — assigned: ' + vs.slice(0,6).map(v=>pad2(v)+' '+VOICES[v]).join(', ') + (vs.length>6?` …+${vs.length-6}`:'');
+}
+function renderKbd(){
+  const g = $('kbd'); g.innerHTML='';
+  const wrap = document.createElement('div'); wrap.className='kbd-wrap';
+  const whiteNotes = [];
+  for(let n=kbBase; whiteNotes.length<KB_WHITE && n<=127; n++) if(!isBlackKey(n)) whiteNotes.push(n);
+  whiteNotes.forEach(wn => {
+    const k=document.createElement('div');
+    k.className = 'wk' + (voicesAtNote(wn).length?' has':'') + (wn===kbSelected?' sel':'');
+    k.title = keyTitle(wn);
+    const lbl=document.createElement('div'); lbl.className='wkLbl'; lbl.textContent=noteName(wn);
+    k.appendChild(lbl);
+    k.onclick = ()=>{ kbSelected=wn; renderKbd(); updateNaTarget(); };
+    wrap.appendChild(k);
+  });
+  whiteNotes.forEach((wn,i) => {
+    const bn = wn+1;
+    if(bn>127 || !isBlackKey(bn) || i===whiteNotes.length-1) return;
+    const b=document.createElement('div');
+    b.className = 'bk' + (voicesAtNote(bn).length?' has':'') + (bn===kbSelected?' sel':'');
+    b.style.left = ((i+1)*18 - 6) + 'px';
+    b.title = keyTitle(bn);
+    b.onclick = (e)=>{ e.stopPropagation(); kbSelected=bn; renderKbd(); updateNaTarget(); };
+    wrap.appendChild(b);
+  });
+  g.appendChild(wrap);
+  const last = whiteNotes[whiteNotes.length-1] ?? kbBase;
+  $('kbRange').textContent = `${noteName(kbBase)}-${noteName(last)}`;
+}
+function updateNaTarget(){
+  $('naTarget').textContent = `Voice ${pad2(curVoice)} ${VOICES[curVoice]||''}  →  Note ${noteName(kbSelected)} (${kbSelected})`;
+}
+function setKbSelectedFromCurVoice(){
+  const n = (noteAssign && noteAssign[curVoice]!=null) ? noteAssign[curVoice] : NOTE_NUMBERS[curVoice];
+  if(n==null) return;
+  kbSelected = n;
+  // Ensure selected note is visible; snap kbBase to octave boundary
+  if(kbSelected < kbBase || kbSelected >= kbBase + 60){
+    kbBase = Math.max(0, Math.min(127-60, Math.floor(kbSelected/12)*12 - 24));
+  }
+  renderKbd();
+}
+$('kbUp').onclick   = ()=>{ if(kbBase+60<=127){ kbBase+=12; renderKbd(); } };
+$('kbDown').onclick = ()=>{ if(kbBase-12>=0){ kbBase-=12; renderKbd(); } };
+
+// Yamaha bulk checksum (RX7): 2's complement of byte sum from header (d[6]) through last data byte
+function bulkChecksum(d){
+  let s=0; for(let i=6; i<=d.length-3; i++) s += d[i];
+  return (0x80 - (s & 0x7F)) & 0x7F;
+}
+function asciiHex(nib){ return nib<10 ? 0x30+nib : 0x41+nib-10; }
+
+async function assignNoteToVoice(voice, note){
+  if(!lastSetup){
+    log('Note# Assign: please click "Refresh Setup" first (need cached Setup bulk).');
+    return;
+  }
+  // Setup bulk layout: DATA starts at d[16], each logical byte = 2 ASCII hex chars
+  // Note# table at logical offset 11 → byte for voice V at d[16 + 2*(11+V)]
+  const pos = 16 + 2*(11 + voice);
+  const buf = new Uint8Array(lastSetup);
+  buf[pos]   = asciiHex((note>>4) & 0x0F);
+  buf[pos+1] = asciiHex(note & 0x0F);
+  buf[buf.length-2] = bulkChecksum(buf);
+  send(buf);
+  if(!noteAssign) noteAssign = new Array(100).fill(0);
+  noteAssign[voice] = note;
+  lastSetup = buf;
+  renderVoices();
+  log(`Note# Assign: voice ${pad2(voice)} ${VOICES[voice]||''} → ${noteName(note)} (${note})`);
+}
+$('naAssign').onclick  = ()=> assignNoteToVoice(curVoice, kbSelected);
+$('naRefresh').onclick = ()=> reqSetup();
+
+// === Memory Protect (UTILITY JOB03) =====================================
+$('memProtOff').onclick = async ()=>{
+  log('Memory Protect → OFF (UTILITY JOB03)');
+  // UTILITY(30) → JOB(31) → 0 → 3 → -1/No
+  await remoteSeq([30, 31, NUMKEY[0], NUMKEY[3], 32], 60, 25);
+};
+$('memProtOn').onclick = async ()=>{
+  log('Memory Protect → ON (UTILITY JOB03)');
+  await remoteSeq([30, 31, NUMKEY[0], NUMKEY[3], 34], 60, 25);
+};
+
+// Device# is set manually on the RX7; the GUI Value input here just controls outgoing SysEx nibble.
+$('kaSave').onclick = async ()=>{
+  const slot = parseInt($('kaSlot').value,10);
+  if(slot>4){ log('Save: slot 0-4 only (5-9 are factory ROM). Cancelled.'); return; }
+  log(`Key Data Save (JOB07) → slot ${slot}`);
+  // KEY ASSIGN→JOB→0→7→numkey(slot)→+1/Yes
+  await remoteSeq([7, 31, NUMKEY[0], NUMKEY[7], NUMKEY[slot], 34]);
+  log('Save done');
+};
+$('kaLoad').onclick = async ()=>{
+  const slot = parseInt($('kaSlot').value,10);
+  log(`Key Data Load (JOB08) → slot ${slot}${slot>4?' (factory)':' (user)'}`);
+  // KEY ASSIGN→JOB→0→8→numkey(slot)→+1/Yes
+  await remoteSeq([7, 31, NUMKEY[0], NUMKEY[8], NUMKEY[slot], 34]);
+  log('Load done — click "Refresh from RX7" to update pad display');
+};
+$('enterKeyAssign').onclick = async ()=>{ sendRemote(7,true); await sleep(40); sendRemote(7,false); };
+
+$('midiChOn').onclick = async ()=>{
+  log('MIDI Ch Message ON (JOB01)');
+  await remoteSeq([23, 31, NUMKEY[0], NUMKEY[1], 34]);
+};
+$('midiChOff').onclick = async ()=>{
+  log('MIDI Ch Message OFF (JOB01)');
+  await remoteSeq([23, 31, NUMKEY[0], NUMKEY[1], 32]);
+};
+$('noteInit').onclick = async ()=>{
+  log('Note Initialize (JOB05) — restoring factory note numbers');
+  await remoteSeq([23, 31, NUMKEY[0], NUMKEY[5], 34]);
+  log('Note Init done — click "Request Setup from RX7" to refresh Note# display');
+};
+$('enterMIDI').onclick = async ()=>{ sendRemote(23,true); await sleep(40); sendRemote(23,false); };
+$('kaRefresh').onclick = ()=> reqSetup();
+
 // === Note test ===
 function nOn(){ if(!output) return; const n=parseInt($('testNote').value,10), v=parseInt($('testVel').value,10); output.send([0x90, n&0x7F, v&0x7F]); }
 function nOff(){ if(!output) return; const n=parseInt($('testNote').value,10); output.send([0x80, n&0x7F, 0]); }
@@ -982,6 +1384,8 @@ $('clearLog').onclick = ()=> $('log').innerHTML='';
 renderVoices(); updateVoiceName();
 renderVoiceEdit(); renderPerfEdit(); renderSysEdit(); renderRemote();
 renderPatGrid();
+renderInstPads(); updateKaTarget();
+renderKbd(); updateNaTarget();
 setLCD(' YAMAHA  RX7', '  Web Editor');
 initMIDI();
 </script>

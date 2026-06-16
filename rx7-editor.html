@@ -111,6 +111,15 @@
   </div>
 </div>
 
+<div style="font-size:11px; color:#c80; border:1px solid #553; background:#2a2410; border-radius:4px; padding:5px 8px; margin:4px 0;">
+  ⚠ <b>Before SysEx will work</b>, prepare the RX7:
+  <ol style="margin:4px 0 0 18px; padding:0;">
+    <li><b>Device#</b>: MIDI → JOB 07 → +1/YES → set to <b>01</b> (default is <code>off</code> and blocks all SysEx). Set the IO section <b>RX7 Device#</b> Value to the same number.</li>
+    <li><b>Memory Protect OFF</b>: UTILITY → JOB 03 → -1/NO (required for any SysEx write — Note# Assign, bulk send, etc.). Use the IO section button as a shortcut.</li>
+    <li><b>Channel Message ON</b>: MIDI → JOB 01 → +1/YES (needed to send/receive Note On/Off, Program Change, etc.).</li>
+  </ol>
+</div>
+
 <details class="sec">
   <summary>Log</summary>
   <div class="row">

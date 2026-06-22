@@ -1,0 +1,189 @@
+{
+  "v": 1,
+  "app": "volca-drum-editor",
+  "name": "Melody",
+  "chMode": "split",
+  "baseCh": 1,
+  "parts": [
+    {
+      "layers": [
+        {
+          "select": 2,
+          "pitch": 56,
+          "egatt": 41,
+          "egrel": 88,
+          "modamt": 16,
+          "modrate": 92,
+          "level": 56
+        },
+        {
+          "select": 6,
+          "pitch": 105,
+          "egatt": 64,
+          "egrel": 93,
+          "modamt": 44,
+          "modrate": 24,
+          "level": 124
+        }
+      ],
+      "qpi": false,
+      "gain": 98,
+      "pan": 9,
+      "send": 18,
+      "bitred": 90,
+      "fold": 18,
+      "drive": 12
+    },
+    {
+      "layers": [
+        {
+          "select": 5,
+          "pitch": 13,
+          "egatt": 15,
+          "egrel": 5,
+          "modamt": 61,
+          "modrate": 91,
+          "level": 104
+        },
+        {
+          "select": 1,
+          "pitch": 52,
+          "egatt": 37,
+          "egrel": 59,
+          "modamt": 5,
+          "modrate": 117,
+          "level": 113
+        }
+      ],
+      "qpi": false,
+      "gain": 125,
+      "pan": 1,
+      "send": 104,
+      "bitred": 23,
+      "fold": 25,
+      "drive": 126
+    },
+    {
+      "layers": [
+        {
+          "select": 0,
+          "pitch": 51,
+          "egatt": 65,
+          "egrel": 113,
+          "modamt": 26,
+          "modrate": 13,
+          "level": 9
+        },
+        {
+          "select": 2,
+          "pitch": 48,
+          "egatt": 101,
+          "egrel": 30,
+          "modamt": 17,
+          "modrate": 26,
+          "level": 58
+        }
+      ],
+      "qpi": false,
+      "gain": 112,
+      "pan": 95,
+      "send": 112,
+      "bitred": 35,
+      "fold": 113,
+      "drive": 102
+    },
+    {
+      "layers": [
+        {
+          "select": 0,
+          "pitch": 53,
+          "egatt": 49,
+          "egrel": 96,
+          "modamt": 5,
+          "modrate": 106,
+          "level": 70
+        },
+        {
+          "select": 1,
+          "pitch": 20,
+          "egatt": 69,
+          "egrel": 26,
+          "modamt": 60,
+          "modrate": 93,
+          "level": 77
+        }
+      ],
+      "qpi": false,
+      "gain": 72,
+      "pan": 45,
+      "send": 40,
+      "bitred": 4,
+      "fold": 95,
+      "drive": 9
+    },
+    {
+      "layers": [
+        {
+          "select": 2,
+          "pitch": 71,
+          "egatt": 45,
+          "egrel": 13,
+          "modamt": 31,
+          "modrate": 124,
+          "level": 17
+        },
+        {
+          "select": 7,
+          "pitch": 79,
+          "egatt": 11,
+          "egrel": 45,
+          "modamt": 116,
+          "modrate": 3,
+          "level": 70
+        }
+      ],
+      "qpi": false,
+      "gain": 92,
+      "pan": 16,
+      "send": 108,
+      "bitred": 64,
+      "fold": 26,
+      "drive": 38
+    },
+    {
+      "layers": [
+        {
+          "select": 1,
+          "pitch": 113,
+          "egatt": 64,
+          "egrel": 59,
+          "modamt": 62,
+          "modrate": 1,
+          "level": 27
+        },
+        {
+          "select": 3,
+          "pitch": 97,
+          "egatt": 63,
+          "egrel": 83,
+          "modamt": 44,
+          "modrate": 84,
+          "level": 39
+        }
+      ],
+      "qpi": false,
+      "gain": 70,
+      "pan": 64,
+      "send": 67,
+      "bitred": 109,
+      "fold": 61,
+      "drive": 43
+    }
+  ],
+  "global": {
+    "wgmodel": 0,
+    "decay": 0,
+    "body": 0,
+    "tune": 15
+  }
+}

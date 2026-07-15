@@ -1933,14 +1933,17 @@ function setupRecorderUI() {
   startBtn.addEventListener('click', () => beginRecord(false));
   overdubBtn.addEventListener('click', () => beginRecord(true));
 
-  stopBtn.addEventListener('click', () => {
+  // 録音停止 (UI更新込み)。sequencer同期からも呼ぶ
+  function doStopRecording() {
+    if (!Recorder.recording) return;
     stopBtn.disabled = true;
     statusEl.textContent = 'processing...';
     Recorder.stop(
       () => { statusEl.textContent = 'stopped'; setRecordingUI(false); updateRecState(); mctx.clearRect(0, 0, meter.width, meter.height); },
       (err) => { statusEl.textContent = 'decode error: ' + err.message; setRecordingUI(false); updateRecState(); }
     );
-  });
+  }
+  stopBtn.addEventListener('click', doStopRecording);
 
   clearBtn.addEventListener('click', () => {
     Recorder.clear();
@@ -1976,7 +1979,11 @@ function setupRecorderUI() {
   }
   // sequencer同期用フック
   window.__recSyncPlay = () => { if (Recorder.sync) doRecPlay(); };
-  window.__recSyncStop = () => { if (Recorder.sync) doRecStop(); };
+  window.__recSyncStop = () => {
+    if (!Recorder.sync) return;
+    doRecStop();        // 再生停止
+    doStopRecording();  // 録音中なら録音も停止
+  };
 
   playBtn.addEventListener('click', () => {
     doRecPlay();

@@ -79,7 +79,7 @@
     border: 1px solid #262b34;
   }
   .cc-btn.active { border-color: #5b8cff; background: #1c2338; }
-  #log {
+  #log, #rxLog {
     background: #0a0b0e;
     border: 1px solid #262b34;
     border-radius: 6px;
@@ -91,6 +91,8 @@
     white-space: pre-wrap;
     color: #9dd6a3;
   }
+  #rxLog { color: #7fc4e8; }
+  #rxLog .cc-hit { color: #f0c674; }
   .status { font-size: 12px; }
   .status.ok { color: #6fd68a; }
   .status.bad { color: #e07a7a; }
@@ -222,6 +224,31 @@
   <div id="log"></div>
 </div>
 
+<div class="panel">
+  <h2>MIDI入力</h2>
+  <div class="row">
+    <div class="field" style="flex:1;min-width:220px;">
+      <label for="inSel">入力デバイス</label>
+      <select id="inSel"></select>
+    </div>
+    <div class="field">
+      <label style="visibility:hidden;">.</label>
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#b3b8c2;">
+        <input type="checkbox" id="filterCcOnly" style="width:auto;"> CCのみ表示
+      </label>
+    </div>
+  </div>
+  <div id="inStatus" class="status bad">入力デバイス未選択</div>
+</div>
+
+<div class="panel">
+  <div class="flex-sp">
+    <h2 style="margin:0;">受信ログ</h2>
+    <button id="clearRxLogBtn">クリア</button>
+  </div>
+  <div id="rxLog"></div>
+</div>
+
 <script>
 const CC_NAMES = {
   0:"Bank Select MSB",1:"Modulation",2:"Breath",4:"Foot Ctrl",5:"Portamento Time",
@@ -241,12 +268,17 @@ const CC_NAMES = {
 
 let midiAccess = null;
 let output = null;
+let input = null;
 let sweepTimer = null;
 
 const outSel = document.getElementById('outSel');
+const inSel = document.getElementById('inSel');
 const chSel = document.getElementById('chSel');
 const statusEl = document.getElementById('status');
+const inStatusEl = document.getElementById('inStatus');
 const logEl = document.getElementById('log');
+const rxLogEl = document.getElementById('rxLog');
+const filterCcOnly = document.getElementById('filterCcOnly');
 const ccNum = document.getElementById('ccNum');
 const ccVal = document.getElementById('ccVal');
 const ccValDisp = document.getElementById('ccValDisp');
@@ -268,6 +300,69 @@ function log(msg) {
 function setStatus(ok, msg) {
   statusEl.className = 'status ' + (ok ? 'ok' : 'bad');
   statusEl.textContent = msg;
+}
+
+function rxLog(msg, isCc) {
+  const t = new Date().toLocaleTimeString();
+  const line = `[${t}] ${msg}`;
+  if (isCc) {
+    const span = document.createElement('div');
+    span.className = 'cc-hit';
+    span.textContent = line;
+    rxLogEl.appendChild(span);
+  } else {
+    const div = document.createElement('div');
+    div.textContent = line;
+    rxLogEl.appendChild(div);
+  }
+  rxLogEl.scrollTop = rxLogEl.scrollHeight;
+}
+
+function setInStatus(ok, msg) {
+  inStatusEl.className = 'status ' + (ok ? 'ok' : 'bad');
+  inStatusEl.textContent = msg;
+}
+
+function describeMidiMessage(data) {
+  const status = data[0];
+  const type = status & 0xF0;
+  const ch = (status & 0x0F) + 1;
+
+  if (status >= 0xF0) {
+    const names = { 0xF8: 'Clock', 0xFA: 'Start', 0xFB: 'Continue', 0xFC: 'Stop', 0xFE: 'ActiveSensing', 0xFF: 'Reset', 0xF0: 'SysEx' };
+    return { text: `${names[status] || 'System'} (${status.toString(16)})`, isCc: false };
+  }
+
+  switch (type) {
+    case 0x80:
+      return { text: `NoteOff ch${ch} note${data[1]} vel${data[2]}`, isCc: false };
+    case 0x90:
+      return { text: `${data[2] === 0 ? 'NoteOff(vel0)' : 'NoteOn'} ch${ch} note${data[1]} vel${data[2]}`, isCc: false };
+    case 0xA0:
+      return { text: `PolyAftertouch ch${ch} note${data[1]} = ${data[2]}`, isCc: false };
+    case 0xB0: {
+      const ccNumRx = data[1];
+      const name = CC_NAMES[ccNumRx];
+      return { text: `CC#${ccNumRx}${name ? ' (' + name + ')' : ''} ch${ch} = ${data[2]}`, isCc: true };
+    }
+    case 0xC0:
+      return { text: `ProgramChange ch${ch} = ${data[1]}`, isCc: false };
+    case 0xD0:
+      return { text: `ChannelPressure ch${ch} = ${data[1]}`, isCc: false };
+    case 0xE0: {
+      const v = (data[2] << 7 | data[1]) - 8192;
+      return { text: `PitchBend ch${ch} = ${v}`, isCc: false };
+    }
+    default:
+      return { text: `Unknown [${data.map(b => b.toString(16).padStart(2,'0')).join(' ')}]`, isCc: false };
+  }
+}
+
+function onMidiMessage(e) {
+  const data = e.data;
+  const { text, isCc } = describeMidiMessage(data);
+  if (filterCcOnly.checked && !isCc) return;
+  rxLog(`${text} [${[...data].map(b => b.toString(16).padStart(2,'0')).join(' ')}]`, isCc);
 }
 
 function currentChannel() {
@@ -360,22 +455,64 @@ function populateOutputs() {
   setStatus(true, `接続OK: ${outputs.length}台の出力デバイス`);
 }
 
+function attachInput(newInput) {
+  if (input) input.onmidimessage = null;
+  input = newInput;
+  if (input) {
+    input.onmidimessage = onMidiMessage;
+    setInStatus(true, `受信中: ${input.name}`);
+  } else {
+    setInStatus(false, '入力デバイス未選択');
+  }
+}
+
+function populateInputs() {
+  const prevId = inSel.value;
+  inSel.innerHTML = '';
+  if (!midiAccess) return;
+  const inputs = [...midiAccess.inputs.values()];
+  if (inputs.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = '(入力デバイスが見つかりません)';
+    inSel.appendChild(opt);
+    setInStatus(false, 'MIDI入力デバイスが見つかりません');
+    attachInput(null);
+    return;
+  }
+  inputs.forEach(i => {
+    const opt = document.createElement('option');
+    opt.value = i.id;
+    opt.textContent = `${i.name} (${i.manufacturer || '?'})`;
+    inSel.appendChild(opt);
+  });
+  const keep = inputs.find(i => i.id === prevId);
+  inSel.value = keep ? keep.id : inputs[0].id;
+  attachInput(keep || inputs[0]);
+}
+
 function initMidi() {
   if (!navigator.requestMIDIAccess) {
     setStatus(false, 'このブラウザはWeb MIDI APIに対応していません（Chrome/Edge推奨）');
+    setInStatus(false, 'このブラウザはWeb MIDI APIに対応していません（Chrome/Edge推奨）');
     return;
   }
   navigator.requestMIDIAccess({ sysex: false }).then(access => {
     midiAccess = access;
     populateOutputs();
-    access.onstatechange = () => populateOutputs();
+    populateInputs();
+    access.onstatechange = () => { populateOutputs(); populateInputs(); };
   }).catch(err => {
     setStatus(false, 'MIDIアクセス拒否: ' + err.message);
+    setInStatus(false, 'MIDIアクセス拒否: ' + err.message);
   });
 }
 
 outSel.addEventListener('change', () => {
   if (midiAccess) output = midiAccess.outputs.get(outSel.value) || null;
+});
+
+inSel.addEventListener('change', () => {
+  if (midiAccess) attachInput(midiAccess.inputs.get(inSel.value) || null);
 });
 
 document.getElementById('refreshBtn').addEventListener('click', initMidi);
@@ -447,6 +584,7 @@ document.getElementById('resetCcBtn').addEventListener('click', () => sendCC(121
 document.getElementById('allSoundOffBtn').addEventListener('click', () => sendCC(120, 0));
 
 document.getElementById('clearLogBtn').addEventListener('click', () => { logEl.textContent = ''; });
+document.getElementById('clearRxLogBtn').addEventListener('click', () => { rxLogEl.textContent = ''; });
 
 buildCcGrid();
 highlightCcGrid();

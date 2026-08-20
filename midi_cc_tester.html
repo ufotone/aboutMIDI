@@ -106,6 +106,14 @@
 <div class="sub">Web MIDI API を使った機器検証用 CC / メッセージ送信ツール</div>
 
 <div class="panel">
+  <div class="flex-sp">
+    <h2 style="margin:0;">受信ログ</h2>
+    <button id="clearRxLogBtn">クリア</button>
+  </div>
+  <div id="rxLog"></div>
+</div>
+
+<div class="panel">
   <h2>MIDI出力</h2>
   <div class="row">
     <div class="field" style="flex:1;min-width:220px;">
@@ -119,8 +127,37 @@
     <div class="field">
       <button id="refreshBtn">再スキャン</button>
     </div>
+    <div class="field">
+      <label for="throttleMs">スライダー送信間隔(ms)</label>
+      <input type="number" id="throttleMs" min="1" max="200" value="15">
+    </div>
   </div>
   <div id="status" class="status bad">MIDIアクセス待機中…</div>
+</div>
+
+<div class="panel">
+  <h2>MIDI入力</h2>
+  <div class="row">
+    <div class="field" style="flex:1;min-width:220px;">
+      <label for="inSel">入力デバイス</label>
+      <select id="inSel"></select>
+    </div>
+    <div class="field">
+      <label style="visibility:hidden;">.</label>
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#b3b8c2;">
+        <input type="checkbox" id="filterCcOnly" style="width:auto;"> CCのみ表示
+      </label>
+    </div>
+  </div>
+  <div id="inStatus" class="status bad">入力デバイス未選択</div>
+</div>
+
+<div class="panel">
+  <div class="flex-sp">
+    <h2 style="margin:0;">送信ログ</h2>
+    <button id="clearLogBtn">クリア</button>
+  </div>
+  <div id="log"></div>
 </div>
 
 <div class="panel">
@@ -183,11 +220,14 @@
       <button id="noteOnBtn">Note On</button>
       <button id="noteOffBtn">Note Off</button>
     </div>
+    <div class="field">
+      <button id="scaleTestBtn" class="primary">C D E F G テスト送信</button>
+    </div>
   </div>
   <div class="row">
     <div class="field">
-      <label for="pcNum">Program Change</label>
-      <input type="number" id="pcNum" min="0" max="127" value="0">
+      <label for="pcNum">Program Change (実機表示 1–128)</label>
+      <input type="number" id="pcNum" min="1" max="128" value="1">
     </div>
     <div class="field">
       <button id="pcBtn">PC送信</button>
@@ -260,39 +300,6 @@
       <button id="rpnPresetCoarse">Coarse Tuning プリセット (RPN2)</button>
     </div>
   </div>
-</div>
-
-<div class="panel">
-  <div class="flex-sp">
-    <h2 style="margin:0;">送信ログ</h2>
-    <button id="clearLogBtn">クリア</button>
-  </div>
-  <div id="log"></div>
-</div>
-
-<div class="panel">
-  <h2>MIDI入力</h2>
-  <div class="row">
-    <div class="field" style="flex:1;min-width:220px;">
-      <label for="inSel">入力デバイス</label>
-      <select id="inSel"></select>
-    </div>
-    <div class="field">
-      <label style="visibility:hidden;">.</label>
-      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#b3b8c2;">
-        <input type="checkbox" id="filterCcOnly" style="width:auto;"> CCのみ表示
-      </label>
-    </div>
-  </div>
-  <div id="inStatus" class="status bad">入力デバイス未選択</div>
-</div>
-
-<div class="panel">
-  <div class="flex-sp">
-    <h2 style="margin:0;">受信ログ</h2>
-    <button id="clearRxLogBtn">クリア</button>
-  </div>
-  <div id="rxLog"></div>
 </div>
 
 <script>
@@ -393,7 +400,7 @@ function describeMidiMessage(data) {
       return { text: `CC#${ccNumRx}${name ? ' (' + name + ')' : ''}${rpnNote} ch${ch} = ${data[2]}`, isCc: true };
     }
     case 0xC0:
-      return { text: `ProgramChange ch${ch} = ${data[1]}`, isCc: false };
+      return { text: `ProgramChange ch${ch} = ${data[1]} (実機表示 Program ${data[1]+1})`, isCc: false };
     case 0xD0:
       return { text: `ChannelPressure ch${ch} = ${data[1]}`, isCc: false };
     case 0xE0: {
@@ -414,6 +421,28 @@ function onMidiMessage(e) {
 
 function currentChannel() {
   return parseInt(chSel.value || '0', 10);
+}
+
+function throttle(fn) {
+  let lastCall = 0;
+  let timer = null;
+  let pendingArgs = null;
+  return (...args) => {
+    pendingArgs = args;
+    const delay = Math.max(1, parseInt(document.getElementById('throttleMs').value, 10) || 15);
+    const now = Date.now();
+    const remaining = delay - (now - lastCall);
+    if (remaining <= 0) {
+      lastCall = now;
+      fn(...pendingArgs);
+    } else if (!timer) {
+      timer = setTimeout(() => {
+        lastCall = Date.now();
+        timer = null;
+        fn(...pendingArgs);
+      }, remaining);
+    }
+  };
 }
 
 function send(bytes, label) {
@@ -442,7 +471,7 @@ function sendNote(on, note, vel) {
 
 function sendPC(prog) {
   const ch = currentChannel();
-  send([0xC0 | ch, prog & 0x7F], `ProgramChange ch${ch+1} = ${prog}`);
+  send([0xC0 | ch, prog & 0x7F], `ProgramChange ch${ch+1} = ${prog} (実機表示 Program ${prog+1})`);
 }
 
 function sendPitchBend(val) {
@@ -584,11 +613,15 @@ inSel.addEventListener('change', () => {
 
 document.getElementById('refreshBtn').addEventListener('click', initMidi);
 
+const throttledSendCc = throttle((cc, v) => sendCC(cc, v));
 ccVal.addEventListener('input', () => {
   ccValDisp.textContent = ccVal.value;
-  sendCC(parseInt(ccNum.value, 10), parseInt(ccVal.value, 10));
+  throttledSendCc(parseInt(ccNum.value, 10), parseInt(ccVal.value, 10));
 });
-ccNum.addEventListener('change', highlightCcGrid);
+ccNum.addEventListener('input', () => {
+  highlightCcGrid();
+  throttledSendCc(parseInt(ccNum.value, 10) || 0, parseInt(ccVal.value, 10));
+});
 document.getElementById('sendCcBtn').addEventListener('click', () => {
   sendCC(parseInt(ccNum.value, 10), parseInt(ccVal.value, 10));
 });
@@ -628,22 +661,37 @@ document.getElementById('noteOnBtn').addEventListener('click', () => {
 document.getElementById('noteOffBtn').addEventListener('click', () => {
   sendNote(false, parseInt(document.getElementById('noteNum').value, 10), 0);
 });
+
+document.getElementById('scaleTestBtn').addEventListener('click', () => {
+  const notes = [60, 62, 64, 65, 67]; // C4 D4 E4 F4 G4
+  const noteLen = 300;
+  const gap = 400;
+  notes.forEach((note, i) => {
+    setTimeout(() => sendNote(true, note, 100), i * gap);
+    setTimeout(() => sendNote(false, note, 0), i * gap + noteLen);
+  });
+  log('CDEFGテスト送信 開始');
+});
+
 document.getElementById('pcBtn').addEventListener('click', () => {
-  sendPC(parseInt(document.getElementById('pcNum').value, 10));
+  const displayVal = parseInt(document.getElementById('pcNum').value, 10) || 1;
+  sendPC(displayVal - 1);
 });
 
 const pbVal = document.getElementById('pbVal');
 const pbValDisp = document.getElementById('pbValDisp');
+const throttledSendPb = throttle(v => sendPitchBend(v));
 pbVal.addEventListener('input', () => {
   pbValDisp.textContent = pbVal.value;
-  sendPitchBend(parseInt(pbVal.value, 10));
+  throttledSendPb(parseInt(pbVal.value, 10));
 });
 
 const atVal = document.getElementById('atVal');
 const atValDisp = document.getElementById('atValDisp');
+const throttledSendAt = throttle(v => sendChannelPressure(v));
 atVal.addEventListener('input', () => {
   atValDisp.textContent = atVal.value;
-  sendChannelPressure(parseInt(atVal.value, 10));
+  throttledSendAt(parseInt(atVal.value, 10));
 });
 
 document.getElementById('allNotesOffBtn').addEventListener('click', () => sendCC(123, 0));
